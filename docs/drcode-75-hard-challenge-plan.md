@@ -14,16 +14,16 @@ Build **DRCODE 75 HARD CHALLENGE** — a group accountability tracker for the 75
 
 ## Architecture
 
-| Layer        | Location                                     | Role                                                                               |
-| ------------ | -------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Frontend     | `apps/web` — Astro static + React islands    | All product pages live here.                                                       |
-| API runtime  | `apps/api` — NestJS + Fastify on `:3001`     | All tRPC procedures, uploads, cron, and OpenAI calls.                              |
-| API contract | `apps/api` exports `AppRouter` type          | `apps/web` imports `AppRouter` as a type only.                                     |
-| Static host  | `apps/web-host` — serves staged Astro builds | Serves static Astro builds only — no API logic.                                    |
-| Shared UI    | `packages/ui`                                | DRCODE design-system components (`TaskCard`, `HeatmapGrid`, etc.).                 |
-| Shared types | `packages/types`                             | Domain DTOs reused outside tRPC inference.                                         |
-| Database     | `packages/db`                                | Prisma schema, client, migrations. Consumed by `apps/api`.                       |
-| Deploy       | `docker-compose.yml` — `web-host` + `api`    | Two-service compose with shared DB volume + env vars.                              |
+| Layer        | Location                                     | Role                                                               |
+| ------------ | -------------------------------------------- | ------------------------------------------------------------------ |
+| Frontend     | `apps/web` — Astro static + React islands    | All product pages live here.                                       |
+| API runtime  | `apps/api` — NestJS + Fastify on `:3001`     | All tRPC procedures, uploads, cron, and OpenAI calls.              |
+| API contract | `apps/api` exports `AppRouter` type          | `apps/web` imports `AppRouter` as a type only.                     |
+| Static host  | `apps/web-host` — serves staged Astro builds | Serves static Astro builds only — no API logic.                    |
+| Shared UI    | `packages/ui`                                | DRCODE design-system components (`TaskCard`, `HeatmapGrid`, etc.). |
+| Shared types | `packages/types`                             | Domain DTOs reused outside tRPC inference.                         |
+| Database     | `packages/db`                                | Prisma schema, client, migrations. Consumed by `apps/api`.         |
+| Deploy       | `docker-compose.yml` — `web-host` + `api`    | Two-service compose with shared DB volume + env vars.              |
 
 ### Request flow
 
@@ -802,7 +802,7 @@ pnpm --filter @workspace-starter/api dev
 pnpm --filter @workspace-starter/web dev
 ```
 
-Or use the template's combined dev:
+Or run everything together:
 
 ```bash
 pnpm dev
