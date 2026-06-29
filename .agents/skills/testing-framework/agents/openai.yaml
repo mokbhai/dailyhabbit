@@ -1,0 +1,4 @@
+interface:
+  display_name: "Testing Framework"
+  short_description: "Guide frontend and backend tests"
+  default_prompt: "Use $testing-framework when adding frontend, backend, or end-to-end tests in template-jp."

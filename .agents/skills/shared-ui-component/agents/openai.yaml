@@ -1,0 +1,4 @@
+interface:
+  display_name: "Shared UI Component"
+  short_description: "Build shared UI components correctly"
+  default_prompt: "Use $shared-ui-component to add a reusable React component to packages/ui and wire it into the web app."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dependency Upgrades"
+  short_description: "Guide dependency upgrades safely"
+  default_prompt: "Use $template-upgrade-dependencies to upgrade package versions across catalogs and workspaces safely."

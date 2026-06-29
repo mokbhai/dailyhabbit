@@ -1,0 +1,47 @@
+.research/
+docs/superpowers/
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+.next
+.astro
+out
+build
+.vite
+*.tsbuildinfo
+
+# Turbo
+.turbo
+
+# Frontends staged for web-host aggregation
+apps/web-host/sites
+
+# Env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Test
+coverage
+.impeccable.md
+
+# Orchestration scratch
+.orchestrate

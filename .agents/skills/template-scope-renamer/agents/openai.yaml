@@ -1,0 +1,4 @@
+interface:
+  display_name: "Template Scope Renamer"
+  short_description: "Rename package scopes safely"
+  default_prompt: "Use $template-scope-renamer to rename legacy internal package scopes across the template without stale references."

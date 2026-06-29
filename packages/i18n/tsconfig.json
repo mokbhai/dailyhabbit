@@ -1,0 +1,8 @@
+{
+  "extends": "@workspace-starter/config-typescript/base.json",
+  "compilerOptions": {
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Improve Skills Iteratively"
+  short_description: "Improve skills from real usage"
+  default_prompt: "Use $improve-skills-iteratively to turn repeated user prompts or task friction into a focused repo-local skill improvement."

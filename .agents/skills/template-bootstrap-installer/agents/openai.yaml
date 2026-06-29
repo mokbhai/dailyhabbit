@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bootstrap Installer"
+  short_description: "Safely change bootstrap setup"
+  default_prompt: "Use $template-bootstrap-installer when changing the JP template bootstrap installer or first-commit setup flow."

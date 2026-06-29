@@ -1,0 +1,4 @@
+interface:
+  display_name: "Astro i18n"
+  short_description: "Use Astro i18n and JSON catalogs correctly"
+  default_prompt: "Use $astro-i18n to add or change localization without rebuilding Astro route helpers."

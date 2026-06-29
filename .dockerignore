@@ -1,0 +1,17 @@
+.astro
+.turbo
+coverage
+dist
+node_modules
+
+.DS_Store
+.env
+.env.*
+!.env.example
+
+apps/*/.astro
+apps/*/dist
+apps/*/node_modules
+apps/web-host/sites
+packages/*/dist
+packages/*/node_modules

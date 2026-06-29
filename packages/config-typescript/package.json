@@ -1,0 +1,19 @@
+{
+  "name": "@workspace-starter/config-typescript",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./base.json": "./base.json",
+    "./node.json": "./node.json",
+    "./react-library.json": "./react-library.json",
+    "./astro.json": "./astro.json",
+    "./nestjs.json": "./nestjs.json"
+  },
+  "files": [
+    "base.json",
+    "node.json",
+    "react-library.json",
+    "astro.json",
+    "nestjs.json"
+  ]
+}

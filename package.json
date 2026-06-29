@@ -1,0 +1,43 @@
+{
+  "name": "dailyhabbit",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "turbo dev",
+    "start": "pnpm build && node scripts/build-frontends.mjs && pnpm -r --parallel --filter @workspace-starter/web-host --filter @workspace-starter/api start",
+    "build:frontends": "node scripts/build-frontends.mjs",
+    "deploy:run": "node scripts/deploy/run.mjs",
+    "setup:starter": "node scripts/setup-starter.mjs",
+    "template:remove-web-apps": "node scripts/template/remove-web-apps.mjs",
+    "template:remove-web-apps:dry-run": "node scripts/template/remove-web-apps.mjs --dry-run",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "prettier --write . --ignore-unknown",
+    "format:check": "prettier --check . --ignore-unknown",
+    "typecheck": "turbo typecheck",
+    "test": "node --test tests/root-start-scripts.test.mjs tests/remove-template-web-apps.test.mjs tests/repository-guardrails.test.mjs tests/build-frontends.test.mjs tests/deploy-dispatcher.test.mjs && turbo test",
+    "verify:fast": "pnpm lint && pnpm format:check && pnpm typecheck && git diff --check && git diff --cached --check",
+    "verify": "pnpm verify:fast && pnpm build && pnpm test",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "clean": "turbo clean",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "catalog:dev-tools",
+    "@typescript-eslint/parser": "catalog:dev-tools",
+    "eslint": "catalog:dev-tools",
+    "globals": "^17.6.0",
+    "prettier": "catalog:dev-tools",
+    "prettier-plugin-astro": "catalog:dev-tools",
+    "turbo": "^2.9.14"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "pnpm": ">=11.1.3 <12"
+  },
+  "packageManager": "pnpm@11.1.3"
+}

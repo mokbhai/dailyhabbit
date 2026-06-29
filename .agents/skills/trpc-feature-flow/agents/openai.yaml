@@ -1,0 +1,4 @@
+interface:
+  display_name: "tRPC Feature Flow"
+  short_description: "Guide tRPC feature work"
+  default_prompt: "Use $trpc-feature-flow when adding a typed API procedure and React consumer."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Version Control Changesets"
+  short_description: "Guide git and changeset hygiene"
+  default_prompt: "Use $version-control-changesets before finalizing a package-affecting change so git state, release notes, and validation are correct."

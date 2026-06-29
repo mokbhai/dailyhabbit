@@ -1,0 +1,4 @@
+interface:
+  display_name: "Template Workspace Changes"
+  short_description: "Keep workspace changes aligned"
+  default_prompt: "Use $template-workspace-changes to add, remove, or rename workspace packages without breaking manifests."
