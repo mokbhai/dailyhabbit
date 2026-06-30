@@ -36,6 +36,28 @@ describe('AuthService JWT_SECRET validation', () => {
     );
   });
 
+  it('throws in production when JWT_SECRET is empty or whitespace-only', () => {
+    process.env.NODE_ENV = 'production';
+
+    expect(() => new AuthService(createConfig(''))).toThrow(
+      /JWT_SECRET must be set to a strong secret in production/,
+    );
+    expect(() => new AuthService(createConfig('   '))).toThrow(
+      /JWT_SECRET must be set to a strong secret in production/,
+    );
+  });
+
+  it('constructs without throwing when NODE_ENV is unset (test/dev bootstrap)', () => {
+    delete process.env.NODE_ENV;
+
+    const service = new AuthService(createConfig());
+    const token = service.signToken({ userId: 'user-1' });
+    expect(service.verifyToken(token)).toEqual({
+      userId: 'user-1',
+      email: null,
+    });
+  });
+
   it('constructs in production with a real secret and round-trips tokens', () => {
     process.env.NODE_ENV = 'production';
     const service = new AuthService(

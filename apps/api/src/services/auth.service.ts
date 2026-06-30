@@ -38,7 +38,7 @@ export class AuthService {
 
     if (!isProduction && !configuredSecret) {
       this.logger.warn(
-        'JWT_SECRET is unset; using the default development secret. Do not use this in production.',
+        'JWT_SECRET is unset or empty; using the default development secret. Do not use this in production.',
       );
     }
   }
