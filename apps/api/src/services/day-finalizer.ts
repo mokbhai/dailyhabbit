@@ -101,7 +101,9 @@ export function evaluateDayRollover(
       netXp: score.netXp,
       personalXp: score.personalXp,
       breakdown: {
-        allScoredLogged,
+        // Means "all gating activities logged for this day" (scored for grouped
+        // users, personal for personal-only) so completion metadata matches streak.
+        allScoredLogged: dayCounted,
         entries: score.breakdown,
       },
     },

@@ -897,6 +897,123 @@ describe('activities service', () => {
     expect(marked.log.xpAwarded).toBe(50);
   });
 
+  it('getToday returns empty activity lists and zero dayTotals for a challenge with no activities', async () => {
+    const today = getUserLocalDate('UTC');
+    const grouplessUser: User = {
+      id: USER_ID,
+      name: 'Empty Board User',
+      phone: null,
+      email: 'empty@example.com',
+      passwordHash: 'hash',
+      timezone: 'UTC',
+      groupId: null,
+      avatarUrl: null,
+      reminderTime: null,
+      createdAt: new Date(),
+    };
+    const challenge: Challenge = {
+      id: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      startDate: today,
+      endDate: null,
+      lengthDays: 30,
+      currentDay: 1,
+      isActive: true,
+      totalXp: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+
+    fake = createFakePrisma({
+      users: [grouplessUser],
+      challenges: [challenge],
+      activities: [],
+    });
+    service = createService();
+
+    const result = await service.getToday(fake.prisma, USER_ID);
+
+    expect(result.scoredActivities).toHaveLength(0);
+    expect(result.personalActivities).toHaveLength(0);
+    expect(result.dayTotals).toEqual({
+      netXp: 0,
+      personalXp: 0,
+      xpEarned: 0,
+      xpDeducted: 0,
+    });
+    expect(result.currentDay).toBe(1);
+  });
+
+  it('recomputeLiveDayScore persists dayCounted as breakdown.allScoredLogged for personal-only users', async () => {
+    const today = getUserLocalDate('UTC');
+    const grouplessUser: User = {
+      id: USER_ID,
+      name: 'Groupless User',
+      phone: null,
+      email: 'solo@example.com',
+      passwordHash: 'hash',
+      timezone: 'UTC',
+      groupId: null,
+      avatarUrl: null,
+      reminderTime: null,
+      createdAt: new Date(),
+    };
+    const challenge: Challenge = {
+      id: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      startDate: today,
+      endDate: null,
+      lengthDays: 30,
+      currentDay: 1,
+      isActive: true,
+      totalXp: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+    const personalOnly: Activity = {
+      id: PERSONAL_ACTIVITY_ID,
+      groupId: null,
+      ownerUserId: USER_ID,
+      seedKey: null,
+      title: 'Morning meditation',
+      emoji: null,
+      kind: ActivityKind.CHECKBOX,
+      scored: false,
+      isPersonal: true,
+      xpComplete: 50,
+      xpMiss: -10,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+      subPoints: null,
+      tiers: null,
+      deductMultiplier: 2,
+      sortOrder: 0,
+      active: true,
+      createdAt: new Date(),
+    };
+
+    fake = createFakePrisma({
+      users: [grouplessUser],
+      challenges: [challenge],
+      activities: [personalOnly],
+    });
+    service = createService();
+
+    await service.markActivity(fake.prisma, USER_ID, PERSONAL_ACTIVITY_ID);
+
+    const stored = await fake.prisma.dayScore.findFirst({
+      where: { challengeId: CHALLENGE_ID, date: today },
+    });
+    const breakdown = stored?.breakdown as { allScoredLogged: boolean };
+    expect(breakdown.allScoredLogged).toBe(true);
+    expect(stored?.personalXp).toBe(50);
+    expect(stored?.netXp).toBe(0);
+  });
+
   it('live DayScore uses applyGrace false (unlogged = 0 deducted)', async () => {
     const today = getUserLocalDate('UTC');
     const activities = await fake.prisma.activity.findMany({

@@ -61,6 +61,16 @@ const personalCheckbox: ScoredActivity = {
   xpMiss: -50,
 };
 
+const personalCheckbox2: ScoredActivity = {
+  id: 'personal-stretch',
+  kind: 'CHECKBOX',
+  scored: false,
+  isPersonal: true,
+  deductMultiplier: 2,
+  xpComplete: 30,
+  xpMiss: -30,
+};
+
 function baseChallenge(overrides: Partial<EvaluateDayRolloverChallenge> = {}) {
   return {
     currentDay: 1,
@@ -172,9 +182,23 @@ describe('evaluateDayRollover — streak semantics', () => {
       previousDayLogs: [{ activityId: personalCheckbox.id, state: 'DONE' }],
     });
 
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(true);
     expect(result.challengeUpdate.currentStreak).toBe(4);
     expect(result.challengeUpdate.longestStreak).toBe(4);
     expect(result.dayScore.personalXp).toBe(50);
+  });
+
+  it('resets streak when only some personal activities are logged on a personal-only day', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({ currentStreak: 5, longestStreak: 5 }),
+      scoredActivities: [],
+      personalActivities: [personalCheckbox, personalCheckbox2],
+      previousDayLogs: [{ activityId: personalCheckbox.id, state: 'DONE' }],
+    });
+
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.longestStreak).toBe(5);
   });
 
   it('grouped users still gate streak on scored activities only', () => {
@@ -193,6 +217,9 @@ describe('evaluateDayRollover — streak semantics', () => {
     expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
     expect(result.challengeUpdate.currentStreak).toBe(0);
     expect(result.challengeUpdate.longestStreak).toBe(10);
+    expect(result.dayScore.netXp).toBe(150);
+    expect(result.dayScore.personalXp).toBe(50);
+    expect(result.challengeUpdate.totalXpIncrement).toBe(150);
   });
 
   it('resets streak to 0 when a scored activity is unlogged', () => {
