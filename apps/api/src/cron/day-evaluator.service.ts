@@ -117,6 +117,22 @@ export class DayEvaluatorService {
     });
 
     await this.prisma.$transaction(async (tx) => {
+      // Authoritative guard: re-read inside the tx so concurrent finalizers cannot
+      // both pass the outer check and double-increment totalXp (SQLite/libSQL
+      // serializes writers; the first tx to set finalized wins).
+      const current = await tx.dayScore.findUnique({
+        where: {
+          challengeId_date: {
+            challengeId: challenge.id,
+            date: previousDay,
+          },
+        },
+        select: { finalized: true },
+      });
+      if (current?.finalized) {
+        return;
+      }
+
       await tx.dayScore.upsert({
         where: {
           challengeId_date: {
