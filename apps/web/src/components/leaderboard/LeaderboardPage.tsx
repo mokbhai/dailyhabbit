@@ -9,6 +9,13 @@ import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
+const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
+
+function displayAvatarUrl(avatarUrl: string | null): string | null {
+  if (!avatarUrl) return null;
+  return avatarUrl.startsWith('http') ? avatarUrl : `${apiUrl}${avatarUrl}`;
+}
+
 type LeaderboardWindow = 'today' | 'week' | 'total';
 
 const WINDOW_OPTIONS: { value: LeaderboardWindow; label: string }[] = [
@@ -52,6 +59,10 @@ function LeaderboardContent() {
   }
 
   const data = leaderboard.data!;
+  const members = data.members.map((member) => ({
+    ...member,
+    avatarUrl: displayAvatarUrl(member.avatarUrl),
+  }));
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -94,7 +105,7 @@ function LeaderboardContent() {
       {data.podium.length > 0 && <PodiumBlock podium={data.podium} />}
 
       <LeaderboardTable
-        members={data.members}
+        members={members}
         sortBy={sortBy}
         onSortChange={setSortBy}
         highlightUserId={me.data?.user.id}

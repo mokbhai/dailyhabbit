@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { ProofUploader } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { PersonalActivitiesSection } from '../activities/PersonalActivitiesSection';
-import { performClientLogout } from '../../lib/auth';
+import { getToken, performClientLogout } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
+
+const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
 function phoneToLocalInput(e164: string | null): string {
   if (!e164) return '';
@@ -173,34 +176,70 @@ function ProfileContent() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--border)] text-2xl font-bold text-[var(--text-muted)]">
-          {data.avatarUrl ? (
-            <img
-              src={data.avatarUrl}
-              alt=""
-              className="h-16 w-16 rounded-full object-cover"
-            />
-          ) : (
-            data.name.charAt(0).toUpperCase()
-          )}
-        </div>
-        <div>
-          <p className="text-lg font-medium text-[var(--text-primary)]">
-            {data.name}
-          </p>
-          <p className="text-sm text-[var(--text-muted)]">
-            {data.phone ?? data.email ?? 'No contact on file'}
-          </p>
-          {data.email && data.phone && (
-            <p className="text-xs text-[var(--text-muted)]">{data.email}</p>
-          )}
-          {data.groupName && (
-            <p className="text-xs text-[var(--text-muted)]">
-              Group: {data.groupName}
+      <div className="space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+        <div className="flex items-center gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--border)] text-2xl font-bold text-[var(--text-muted)]">
+            {data.avatarUrl ? (
+              <img
+                src={
+                  data.avatarUrl.startsWith('http')
+                    ? data.avatarUrl
+                    : `${apiUrl}${data.avatarUrl}`
+                }
+                alt=""
+                className="h-16 w-16 rounded-full object-cover"
+              />
+            ) : (
+              data.name.charAt(0).toUpperCase()
+            )}
+          </div>
+          <div>
+            <p className="text-lg font-medium text-[var(--text-primary)]">
+              {data.name}
             </p>
-          )}
+            <p className="text-sm text-[var(--text-muted)]">
+              {data.phone ?? data.email ?? 'No contact on file'}
+            </p>
+            {data.email && data.phone && (
+              <p className="text-xs text-[var(--text-muted)]">{data.email}</p>
+            )}
+            {data.groupName && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Group: {data.groupName}
+              </p>
+            )}
+          </div>
         </div>
+
+        <ProofUploader
+          uploadUrl={`${apiUrl}/api/uploads`}
+          apiBaseUrl={apiUrl}
+          authToken={getToken()}
+          accept="image/jpeg,image/png,image/webp"
+          value={data.avatarUrl}
+          onUploaded={(url) => {
+            setMessage(null);
+            updateProfile.mutate({ avatarUrl: url });
+          }}
+          onError={() => setMessage(null)}
+          buttonClassName="text-xs"
+          previewClassName="max-h-32 rounded-full"
+        />
+
+        {data.avatarUrl && (
+          <button
+            type="button"
+            data-testid="remove-avatar-button"
+            onClick={() => {
+              setMessage(null);
+              updateProfile.mutate({ avatarUrl: null });
+            }}
+            disabled={updateProfile.isPending}
+            className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-red)] disabled:opacity-50"
+          >
+            Remove photo
+          </button>
+        )}
       </div>
 
       <form
