@@ -3,7 +3,10 @@ import { TRPCError } from '@trpc/server';
 import { seedGroupActivities } from '@workspace-starter/db';
 import { z } from 'zod';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { latestChallengeRelationArgs } from '../../utils/challenge-query';
+import {
+  DEFAULT_CHALLENGE_LENGTH_DAYS,
+  latestChallengeRelationArgs,
+} from '../../utils/challenge-query';
 import { buildInviteUrl } from '../../utils/invite-url';
 import { getMemberStatus } from '../../utils/member-status';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
@@ -188,7 +191,7 @@ export const groupsRouter = router({
               startDate: new Date(),
               currentDay: 1,
               isActive: true,
-              lengthDays: 30,
+              lengthDays: DEFAULT_CHALLENGE_LENGTH_DAYS,
             },
           });
         } else {

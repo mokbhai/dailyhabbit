@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getHeatmap, setDayLabel } from '../../services/heatmap.service';
+import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../../utils/challenge-query';
 import { protectedProcedure, router } from '../trpc';
 
 export const heatmapRouter = router({
@@ -10,7 +11,7 @@ export const heatmapRouter = router({
   setDayLabel: protectedProcedure
     .input(
       z.object({
-        dayNumber: z.number().int().min(1).max(75),
+        dayNumber: z.number().int().min(1).max(DEFAULT_CHALLENGE_LENGTH_DAYS),
         labelText: z.string().min(1).max(200),
       }),
     )

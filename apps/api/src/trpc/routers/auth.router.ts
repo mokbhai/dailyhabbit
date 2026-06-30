@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { normalizePhone, PhoneValidationError } from '../../auth/phone';
+import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../../utils/challenge-query';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
 
 const userSelect = {
@@ -89,7 +90,7 @@ export const authRouter = router({
             startDate: new Date(),
             currentDay: 1,
             isActive: true,
-            lengthDays: 30,
+            lengthDays: DEFAULT_CHALLENGE_LENGTH_DAYS,
           },
         });
 

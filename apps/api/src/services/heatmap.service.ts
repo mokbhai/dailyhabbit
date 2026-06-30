@@ -1,6 +1,9 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
-import { latestChallengeRelationArgs } from '../utils/challenge-query';
+import {
+  DEFAULT_CHALLENGE_LENGTH_DAYS,
+  latestChallengeRelationArgs,
+} from '../utils/challenge-query';
 import {
   isInterimDayCompleted,
   isInterimDayFailed,
@@ -61,7 +64,7 @@ export async function getHeatmap(
 
   const currentDay = challenge?.currentDay ?? 1;
   const isActive = challenge?.isActive ?? false;
-  const lengthDays = challenge?.lengthDays ?? 30;
+  const lengthDays = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
 
   const cells: HeatmapCell[] = [];
 
@@ -125,7 +128,7 @@ export async function setDayLabel(
     orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
     select: { lengthDays: true },
   });
-  const maxDay = challenge?.lengthDays ?? 30;
+  const maxDay = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
 
   if (dayNumber < 1 || dayNumber > maxDay) {
     throw new TRPCError({

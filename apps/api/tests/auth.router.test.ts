@@ -24,7 +24,7 @@ function createAuthContext(
     users: Map<string, StoredUser>;
     usersByPhone: Map<string, StoredUser>;
     usersByEmail: Map<string, StoredUser>;
-    challenges: Array<{ userId: string }>;
+    challenges: Array<{ userId: string; lengthDays: number }>;
   },
   authOverrides: Partial<Context['authService']> = {},
 ): Context {
@@ -85,10 +85,16 @@ function createAuthContext(
           ),
         },
         challenge: {
-          create: vi.fn(async ({ data }: { data: { userId: string } }) => {
-            stores.challenges.push(data);
-            return data;
-          }),
+          create: vi.fn(
+            async ({
+              data,
+            }: {
+              data: { userId: string; lengthDays: number };
+            }) => {
+              stores.challenges.push(data);
+              return data;
+            },
+          ),
         },
       };
       return fn(tx as unknown as typeof prisma);
@@ -135,6 +141,7 @@ describe('authRouter register/login', () => {
     expect(result.user.phone).toBe(PHONE);
     expect(result.user.email).toBeNull();
     expect(stores.challenges).toHaveLength(1);
+    expect(stores.challenges[0]?.lengthDays).toBe(75);
     expect(ctx.authService.hashPassword).toHaveBeenCalledWith(PASSWORD);
   });
 
