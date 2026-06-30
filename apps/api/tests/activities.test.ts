@@ -823,6 +823,80 @@ describe('activities service', () => {
     expect(dayScore?.finalized).toBe(false);
   });
 
+  it('getToday returns personal activities for groupless users with an active challenge', async () => {
+    const today = getUserLocalDate('UTC');
+    const grouplessUser: User = {
+      id: USER_ID,
+      name: 'Groupless User',
+      phone: null,
+      email: 'solo@example.com',
+      passwordHash: 'hash',
+      timezone: 'UTC',
+      groupId: null,
+      avatarUrl: null,
+      reminderTime: null,
+      createdAt: new Date(),
+    };
+    const challenge: Challenge = {
+      id: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      startDate: today,
+      endDate: null,
+      lengthDays: 30,
+      currentDay: 1,
+      isActive: true,
+      totalXp: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+    const personalOnly: Activity = {
+      id: PERSONAL_ACTIVITY_ID,
+      groupId: null,
+      ownerUserId: USER_ID,
+      seedKey: null,
+      title: 'Morning meditation',
+      emoji: null,
+      kind: ActivityKind.CHECKBOX,
+      scored: false,
+      isPersonal: true,
+      xpComplete: 50,
+      xpMiss: -10,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+      subPoints: null,
+      tiers: null,
+      deductMultiplier: 2,
+      sortOrder: 0,
+      active: true,
+      createdAt: new Date(),
+    };
+
+    fake = createFakePrisma({
+      users: [grouplessUser],
+      challenges: [challenge],
+      activities: [personalOnly],
+    });
+    service = createService();
+
+    const result = await service.getToday(fake.prisma, USER_ID);
+
+    expect(result.scoredActivities).toHaveLength(0);
+    expect(result.personalActivities).toHaveLength(1);
+    expect(result.personalActivities[0]?.id).toBe(PERSONAL_ACTIVITY_ID);
+    expect(result.currentDay).toBe(1);
+    expect(result.canEdit).toBe(true);
+
+    const marked = await service.markActivity(
+      fake.prisma,
+      USER_ID,
+      PERSONAL_ACTIVITY_ID,
+    );
+    expect(marked.log.xpAwarded).toBe(50);
+  });
+
   it('live DayScore uses applyGrace false (unlogged = 0 deducted)', async () => {
     const today = getUserLocalDate('UTC');
     const activities = await fake.prisma.activity.findMany({

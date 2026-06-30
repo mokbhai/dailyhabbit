@@ -609,9 +609,9 @@ export class ActivitiesService {
     const canEdit = isBeforeMidnight(user.timezone);
 
     const challenge = await findActiveChallenge(prisma, userId);
-    if (!challenge || !user.groupId) {
+    if (!challenge) {
       return {
-        currentDay: challenge?.currentDay ?? 1,
+        currentDay: 1,
         date: todayDate,
         canEdit,
         dayTotals: emptyDayTotals(),

@@ -151,6 +151,50 @@ describe('evaluateDayRollover — streak semantics', () => {
     expect(result.challengeUpdate.currentStreak).toBe(3);
   });
 
+  it('resets streak to 0 when a personal-only day has unlogged personal activities', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({ currentStreak: 5, longestStreak: 5 }),
+      scoredActivities: [],
+      personalActivities: [personalCheckbox],
+      previousDayLogs: [],
+    });
+
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.longestStreak).toBe(5);
+  });
+
+  it('increments streak when all personal activities are logged on a personal-only day', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({ currentStreak: 3, longestStreak: 3 }),
+      scoredActivities: [],
+      personalActivities: [personalCheckbox],
+      previousDayLogs: [{ activityId: personalCheckbox.id, state: 'DONE' }],
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(4);
+    expect(result.challengeUpdate.longestStreak).toBe(4);
+    expect(result.dayScore.personalXp).toBe(50);
+  });
+
+  it('grouped users still gate streak on scored activities only', () => {
+    const logs: ActivityLogInput[] = [
+      { activityId: checkboxActivity.id, state: 'DONE' },
+      { activityId: personalCheckbox.id, state: 'DONE' },
+    ];
+
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({ currentStreak: 7, longestStreak: 10 }),
+      scoredActivities: scoredSet,
+      personalActivities: [personalCheckbox],
+      previousDayLogs: logs,
+    });
+
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.longestStreak).toBe(10);
+  });
+
   it('resets streak to 0 when a scored activity is unlogged', () => {
     const logs: ActivityLogInput[] = [
       { activityId: checkboxActivity.id, state: 'DONE' },
@@ -600,7 +644,7 @@ describe('DayEvaluatorService — cron guards', () => {
     previousDay = addLocalDays(localToday, -1, timezone);
   });
 
-  it('skips users with no group', async () => {
+  it('skips groupless users with no personal activities', async () => {
     const { prisma, transactionOps } = createCronFakePrisma({
       users: [
         {
@@ -638,6 +682,134 @@ describe('DayEvaluatorService — cron guards', () => {
     await service.evaluateDays();
 
     expect(transactionOps).toHaveLength(0);
+  });
+
+  it('finalizes groupless user with personal activities when all are logged', async () => {
+    const personalActivity = makeActivity({
+      id: 'personal-1',
+      groupId: null,
+      ownerUserId: 'user-1',
+      scored: false,
+      isPersonal: true,
+      xpComplete: 50,
+      xpMiss: -50,
+    });
+
+    const { prisma, transactionOps, challenges, dayScores } =
+      createCronFakePrisma({
+        users: [
+          {
+            id: 'user-1',
+            phone: null,
+            email: 'a@b.com',
+            passwordHash: 'x',
+            name: 'User',
+            timezone,
+            groupId: null,
+            createdAt: new Date(),
+            avatarUrl: null,
+            reminderTime: null,
+          },
+        ],
+        challenges: [
+          {
+            id: 'ch-1',
+            userId: 'user-1',
+            groupId: null,
+            startDate,
+            endDate: null,
+            lengthDays: 30,
+            currentDay: 5,
+            isActive: true,
+            totalXp: 0,
+            currentStreak: 2,
+            longestStreak: 2,
+          },
+        ],
+        activities: [personalActivity],
+        activityLogs: [
+          {
+            id: 'log-1',
+            challengeId: 'ch-1',
+            userId: 'user-1',
+            activityId: 'personal-1',
+            date: previousDay,
+            value: null,
+            tier: null,
+            subPoints: null,
+            state: 'DONE',
+            xpAwarded: 50,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        ],
+      });
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+
+    expect(transactionOps).toHaveLength(2);
+    const challenge = challenges.get('ch-1');
+    const score = dayScores.get(dayScoreKey('ch-1', previousDay));
+    expect(challenge?.currentDay).toBe(6);
+    expect(challenge?.currentStreak).toBe(3);
+    expect(challenge?.totalXp).toBe(0);
+    expect(score?.personalXp).toBe(50);
+    expect(score?.finalized).toBe(true);
+  });
+
+  it('resets streak for groupless user when personal activities are unlogged', async () => {
+    const personalActivity = makeActivity({
+      id: 'personal-1',
+      groupId: null,
+      ownerUserId: 'user-1',
+      scored: false,
+      isPersonal: true,
+      xpComplete: 50,
+      xpMiss: -50,
+    });
+
+    const { prisma, transactionOps, challenges } = createCronFakePrisma({
+      users: [
+        {
+          id: 'user-1',
+          phone: null,
+          email: 'a@b.com',
+          passwordHash: 'x',
+          name: 'User',
+          timezone,
+          groupId: null,
+          createdAt: new Date(),
+          avatarUrl: null,
+          reminderTime: null,
+        },
+      ],
+      challenges: [
+        {
+          id: 'ch-1',
+          userId: 'user-1',
+          groupId: null,
+          startDate,
+          endDate: null,
+          lengthDays: 30,
+          currentDay: 5,
+          isActive: true,
+          totalXp: 0,
+          currentStreak: 4,
+          longestStreak: 4,
+        },
+      ],
+      activities: [personalActivity],
+      activityLogs: [],
+    });
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+
+    expect(transactionOps).toHaveLength(2);
+    const challenge = challenges.get('ch-1');
+    expect(challenge?.currentStreak).toBe(0);
+    expect(challenge?.currentDay).toBe(6);
   });
 
   it('skips when previous day is already finalized', async () => {

@@ -54,24 +54,24 @@ export class DayEvaluatorService {
       currentStreak: number;
     },
   ) {
-    if (!groupId) {
-      return;
+    const orConditions: Array<Record<string, unknown>> = [
+      { ownerUserId: userId, isPersonal: true, active: true },
+    ];
+    // Mirror loadUserActivities: only match group/scored activities when the user has a group.
+    if (groupId) {
+      orConditions.unshift({ groupId, active: true, scored: true });
     }
 
     const activities = await this.prisma.activity.findMany({
-      where: {
-        OR: [
-          { groupId, active: true, scored: true },
-          { ownerUserId: userId, isPersonal: true, active: true },
-        ],
-      },
+      where: { OR: orConditions },
     });
 
     const scoredActivities = activities.filter(
       (a) => a.scored && !a.isPersonal,
     );
+    const personalActivities = activities.filter((a) => a.isPersonal);
 
-    if (scoredActivities.length === 0) {
+    if (scoredActivities.length === 0 && personalActivities.length === 0) {
       return;
     }
 
@@ -101,8 +101,6 @@ export class DayEvaluatorService {
         date: previousDay,
       },
     });
-
-    const personalActivities = activities.filter((a) => a.isPersonal);
 
     const result = evaluateDayRollover({
       challenge: {
