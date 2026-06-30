@@ -99,7 +99,13 @@ export const activitiesRouter = router({
     .input(
       z.object({
         activityId: z.string().min(1),
-        proofUrl: z.string().url(),
+        // Only paths from our /api/uploads endpoint; blocks SSRF, data URIs, and .. traversal.
+        proofUrl: z
+          .string()
+          .regex(
+            /^\/uploads\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/,
+            'proofUrl must be an uploaded file path',
+          ),
       }),
     )
     .mutation(async ({ ctx, input }) => {
