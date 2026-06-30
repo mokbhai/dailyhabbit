@@ -460,17 +460,28 @@ export async function recomputeLiveDayScore(
   const scoredIds = activities
     .filter((a) => a.scored && !a.isPersonal)
     .map((a) => a.id);
+  const personalIds = activities.filter((a) => a.isPersonal).map((a) => a.id);
 
-  const { allScoredLogged } = computeDayLoggingStatus(
-    scoredIds,
-    logs.map((log) => ({
-      activityId: log.activityId,
-      state: log.state,
-      tier: log.tier,
-      value: log.value,
-      subPoints: log.subPoints,
-    })),
+  const logInputs = logs.map((log) => ({
+    activityId: log.activityId,
+    state: log.state,
+    tier: log.tier,
+    value: log.value,
+    subPoints: log.subPoints,
+  }));
+
+  const { allScoredLogged } = computeDayLoggingStatus(scoredIds, logInputs);
+  const { allScoredLogged: allPersonalLogged } = computeDayLoggingStatus(
+    personalIds,
+    logInputs,
   );
+
+  const dayCounted =
+    scoredIds.length > 0
+      ? allScoredLogged
+      : personalIds.length > 0
+        ? allPersonalLogged
+        : false;
 
   await prisma.dayScore.upsert({
     where: {
@@ -485,7 +496,7 @@ export async function recomputeLiveDayScore(
       xpDeducted: score.xpDeducted,
       netXp: score.netXp,
       personalXp: score.personalXp,
-      breakdown: { allScoredLogged, entries: score.breakdown },
+      breakdown: { allScoredLogged: dayCounted, entries: score.breakdown },
       finalized: false,
     },
     update: {
@@ -493,7 +504,7 @@ export async function recomputeLiveDayScore(
       xpDeducted: score.xpDeducted,
       netXp: score.netXp,
       personalXp: score.personalXp,
-      breakdown: { allScoredLogged, entries: score.breakdown },
+      breakdown: { allScoredLogged: dayCounted, entries: score.breakdown },
       finalized: false,
     },
   });
@@ -609,9 +620,9 @@ export class ActivitiesService {
     const canEdit = isBeforeMidnight(user.timezone);
 
     const challenge = await findActiveChallenge(prisma, userId);
-    if (!challenge || !user.groupId) {
+    if (!challenge) {
       return {
-        currentDay: challenge?.currentDay ?? 1,
+        currentDay: 1,
         date: todayDate,
         canEdit,
         dayTotals: emptyDayTotals(),

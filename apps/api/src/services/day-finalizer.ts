@@ -61,6 +61,18 @@ export function evaluateDayRollover(
     })),
   );
 
+  const personalActivityIds = personalActivities.map((activity) => activity.id);
+  const { allScoredLogged: allPersonalLogged } = computeDayLoggingStatus(
+    personalActivityIds,
+    previousDayLogs.map((log) => ({
+      activityId: log.activityId,
+      state: log.state ?? null,
+      tier: log.tier ?? null,
+      value: log.value ?? null,
+      subPoints: log.subPoints ?? null,
+    })),
+  );
+
   const logsById = Object.fromEntries(
     previousDayLogs.map((log) => [log.activityId, log]),
   );
@@ -68,7 +80,15 @@ export function evaluateDayRollover(
   const allActivities = [...scoredActivities, ...personalActivities];
   const score = computeDayScore(allActivities, logsById, { applyGrace: true });
 
-  const newStreak = allScoredLogged ? challenge.currentStreak + 1 : 0;
+  // Streak gating: scored activities when present, otherwise personal-only days
+  // require all personal activities logged (avoids vacuous true when scored set is empty).
+  const dayCounted =
+    scoredActivities.length > 0
+      ? allScoredLogged
+      : personalActivities.length > 0
+        ? allPersonalLogged
+        : false;
+  const newStreak = dayCounted ? challenge.currentStreak + 1 : 0;
   const newLongestStreak = Math.max(challenge.longestStreak, newStreak);
   const newDay = challenge.currentDay + 1;
   const completed = newDay > challenge.lengthDays;
@@ -81,7 +101,9 @@ export function evaluateDayRollover(
       netXp: score.netXp,
       personalXp: score.personalXp,
       breakdown: {
-        allScoredLogged,
+        // Means "all gating activities logged for this day" (scored for grouped
+        // users, personal for personal-only) so completion metadata matches streak.
+        allScoredLogged: dayCounted,
         entries: score.breakdown,
       },
     },
