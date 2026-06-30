@@ -30,11 +30,26 @@ model User {
   avatarUrl    String?
   groupId      String?
   group        Group?        @relation(fields: [groupId], references: [id])
-  reminderTime String?
-  createdAt    DateTime      @default(now())
-  challenges   Challenge[]
-  activityLogs ActivityLog[]
-  adminOf      Group[]       @relation("GroupAdmin")
+  reminderTime  String?
+  whatsappOptIn Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  challenges     Challenge[]
+  activityLogs   ActivityLog[]
+  reminderLogs   ReminderLog[]
+  adminOf        Group[]       @relation("GroupAdmin")
+}
+
+model ReminderLog {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+  date   DateTime
+  kind   String
+  sentAt DateTime @default(now())
+  status String
+
+  @@unique([userId, date, kind])
+  @@index([userId, date])
 }
 
 model Group {

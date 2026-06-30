@@ -1,10 +1,15 @@
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { LegacyTaskType } from './activities.service';
+import {
+  getPromptsDir,
+  loadPromptFile,
+  parsePromptMarkdown,
+  type PromptContent,
+} from './prompt-loader';
 
 export type VerificationResult = {
   passed: boolean;
@@ -17,11 +22,6 @@ const PROMPT_FILES: Partial<Record<LegacyTaskType, string>> = {
   INDOOR_WORKOUT: 'indoor-workout.md',
   WATER: 'water.md',
   PROGRESS_PHOTO: 'progress-photo.md',
-};
-
-type PromptContent = {
-  system: string;
-  user: string;
 };
 
 @Injectable()
@@ -112,28 +112,9 @@ export class ProofVerifierService {
       return cached;
     }
 
-    const promptPath = path.join(this.getPromptsDir(), filename);
-    const raw = await readFile(promptPath, 'utf8');
-    const parsed = parsePromptMarkdown(raw);
+    const parsed = await loadPromptFile(filename);
     this.promptCache.set(filename, parsed);
     return parsed;
-  }
-
-  private getPromptsDir(): string {
-    const candidates = [
-      path.join(__dirname, 'prompts'),
-      path.join(__dirname, '..', 'prompts'),
-      path.join(process.cwd(), 'apps', 'api', 'src', 'prompts'),
-      path.join(process.cwd(), 'src', 'prompts'),
-    ];
-
-    for (const dir of candidates) {
-      if (existsSync(dir)) {
-        return dir;
-      }
-    }
-
-    throw new Error('Prompts directory not found');
   }
 
   private async resolveImageUrl(imageUrl: string): Promise<string> {
@@ -163,18 +144,5 @@ export class ProofVerifierService {
   }
 }
 
-function parsePromptMarkdown(raw: string): PromptContent {
-  const systemMatch = raw.match(/## System\s+([\s\S]*?)(?=## User|$)/i);
-  const userMatch = raw.match(/## User\s+([\s\S]*?)$/i);
-
-  const system = systemMatch?.[1]?.trim();
-  const user = userMatch?.[1]?.trim();
-
-  if (!system || !user) {
-    throw new Error(
-      'Prompt markdown must include ## System and ## User sections',
-    );
-  }
-
-  return { system, user };
-}
+// Re-export for tests that may import parsePromptMarkdown from here
+export { getPromptsDir, parsePromptMarkdown };

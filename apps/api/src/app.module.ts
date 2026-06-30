@@ -3,9 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import path from 'node:path';
 import { DayEvaluatorService } from './cron/day-evaluator.service';
+import { ReminderService } from './cron/reminder.service';
 import { AuthModule } from './modules/auth.module';
 import { ActivitiesModule } from './modules/activities.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -19,7 +21,8 @@ const repoRoot = path.resolve(__dirname, '../../..');
     PrismaModule,
     AuthModule,
     ActivitiesModule,
+    WhatsappModule,
   ],
-  providers: [DayEvaluatorService],
+  providers: [DayEvaluatorService, ReminderService],
 })
 export class AppModule {}

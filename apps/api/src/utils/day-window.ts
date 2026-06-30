@@ -7,7 +7,10 @@ type DateParts = {
   second: number;
 };
 
-function getDatePartsInTimezone(date: Date, timeZone: string): DateParts {
+export function getDatePartsInTimezone(
+  date: Date,
+  timeZone: string,
+): DateParts {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
@@ -84,6 +87,28 @@ function addDaysToDateKey(dateKey: string, days: number): string {
   const { year, month, day } = parseDateKey(dateKey);
   const utc = new Date(Date.UTC(year, month - 1, day + days));
   return utc.toISOString().slice(0, 10);
+}
+
+/** True when the user's local hour:minute equals targetHHMM (for EVERY_MINUTE cron). */
+export function isLocalTimeMatch(
+  timezone: string,
+  targetHHMM: string,
+  now = new Date(),
+): boolean {
+  const [targetHour, targetMinute] = targetHHMM.split(':').map(Number);
+  if (
+    Number.isNaN(targetHour) ||
+    Number.isNaN(targetMinute) ||
+    targetHour < 0 ||
+    targetHour > 23 ||
+    targetMinute < 0 ||
+    targetMinute > 59
+  ) {
+    return false;
+  }
+
+  const { hour, minute } = getDatePartsInTimezone(now, timezone);
+  return hour === targetHour && minute === targetMinute;
 }
 
 /** Returns UTC instant for midnight of the user's current local calendar day. */
