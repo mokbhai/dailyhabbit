@@ -13,6 +13,28 @@ export type SubPointConfig = {
   xp: number;
 };
 
+export type TaskGuidanceLink = {
+  label: string;
+  url: string;
+};
+
+export type TaskGuidanceTips = {
+  title: string;
+  bullets: string[];
+  links?: TaskGuidanceLink[];
+};
+
+export type TaskGuidanceSubPoint = {
+  ruleBlock: string;
+  tips: TaskGuidanceTips;
+};
+
+export type TaskGuidance = {
+  ruleBlock: string;
+  tips: TaskGuidanceTips;
+  subPoints?: Record<string, TaskGuidanceSubPoint>;
+};
+
 export type ActivityLogView = {
   state: SubPointState | null;
   value: number | null;
@@ -41,6 +63,7 @@ export type TaskCardProps = {
   onTierSelect?: (tierKey: string) => void;
   onSubPointChange?: (states: Record<string, SubPointState>) => void;
   expandedContent?: ReactNode;
+  guidance?: TaskGuidance;
   disabled?: boolean;
   className?: string;
 };
@@ -128,6 +151,83 @@ function bodyTapEnabled(kind: ActivityKind): boolean {
   return kind === 'CHECKBOX' || kind === 'SUBPOINTS';
 }
 
+function GuidancePanel({
+  guidance,
+  subPointLabels,
+}: {
+  guidance: TaskGuidance;
+  subPointLabels?: Record<string, string>;
+}) {
+  const subPointEntries = guidance.subPoints
+    ? Object.entries(guidance.subPoints)
+    : [];
+
+  return (
+    <div className="space-y-4 text-sm text-[var(--text-muted)]">
+      <div>
+        <p
+          className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          Rules
+        </p>
+        <p className="leading-relaxed text-[var(--text-primary)]">
+          {guidance.ruleBlock}
+        </p>
+      </div>
+
+      {subPointEntries.length > 0 && (
+        <div className="space-y-3">
+          {subPointEntries.map(([key, sub]) => (
+            <div
+              key={key}
+              className="rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2"
+            >
+              <p
+                className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {subPointLabels?.[key] ?? key}
+              </p>
+              <p className="leading-relaxed">{sub.ruleBlock}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <p
+          className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          {guidance.tips.title}
+        </p>
+        <ul className="list-disc space-y-1 pl-4 leading-relaxed">
+          {guidance.tips.bullets.map((bullet) => (
+            <li key={bullet}>{bullet}</li>
+          ))}
+        </ul>
+        {guidance.tips.links && guidance.tips.links.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {guidance.tips.links.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent-red)] underline-offset-2 hover:underline"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TaskCard({
   icon,
   title,
@@ -146,10 +246,12 @@ export function TaskCard({
   onTierSelect,
   onSubPointChange,
   expandedContent,
+  guidance,
   disabled = false,
   className,
 }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
   const status = deriveStatus(kind, log, canEdit);
   const xpAwarded = log?.xpAwarded ?? 0;
   const isComplete = status === 'COMPLETED';
@@ -178,6 +280,9 @@ export function TaskCard({
   }
 
   const numberValue = log?.value ?? 0;
+  const subPointLabels = Object.fromEntries(
+    subPoints.map((sp) => [sp.key, sp.label]),
+  );
 
   return (
     <div
@@ -225,6 +330,23 @@ export function TaskCard({
           </span>
         </button>
 
+        {guidance && (
+          <button
+            type="button"
+            aria-expanded={guidanceOpen}
+            aria-label={guidanceOpen ? 'Hide guidance' : 'Show guidance'}
+            onClick={() => setGuidanceOpen((open) => !open)}
+            className={cn(
+              'flex w-12 shrink-0 items-center justify-center border-l border-[var(--border)] text-base transition hover:bg-[var(--surface-raised)]',
+              guidanceOpen
+                ? 'text-[var(--accent-red)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]',
+            )}
+          >
+            ⓘ
+          </button>
+        )}
+
         {showExpand && (
           <button
             type="button"
@@ -237,6 +359,12 @@ export function TaskCard({
           </button>
         )}
       </div>
+
+      {guidanceOpen && guidance && (
+        <div className="border-t border-[var(--border)] px-4 py-4">
+          <GuidancePanel guidance={guidance} subPointLabels={subPointLabels} />
+        </div>
+      )}
 
       {expanded && showExpand && (
         <div className="border-t border-[var(--border)] px-4 py-4">

@@ -1,3 +1,4 @@
+import { getGuidance } from '@workspace-starter/types';
 import { useState } from 'react';
 import {
   DayCounter,
@@ -225,6 +226,7 @@ function ActivityCard({
       onSubPointChange={(states) =>
         setSubPoints.mutate({ activityId: activity.id, states })
       }
+      guidance={getGuidance(activity.seedKey)}
       expandedContent={
         activity.canAttachProof ? (
           <ProofSection

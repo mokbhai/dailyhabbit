@@ -40,6 +40,10 @@ export type {
   SubPointConfig,
   SubPointState,
   TaskCardProps,
+  TaskGuidance,
+  TaskGuidanceLink,
+  TaskGuidanceSubPoint,
+  TaskGuidanceTips,
   TaskStatus,
 } from './components/TaskCard';
 
