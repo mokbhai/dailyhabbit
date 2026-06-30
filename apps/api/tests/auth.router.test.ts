@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { authRouter } from '../src/trpc/routers/auth.router';
+import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../src/utils/challenge-query';
 import type { Context } from '../src/trpc/context';
 
 const USER_ID = 'user-1';
@@ -141,7 +142,9 @@ describe('authRouter register/login', () => {
     expect(result.user.phone).toBe(PHONE);
     expect(result.user.email).toBeNull();
     expect(stores.challenges).toHaveLength(1);
-    expect(stores.challenges[0]?.lengthDays).toBe(75);
+    expect(stores.challenges[0]?.lengthDays).toBe(
+      DEFAULT_CHALLENGE_LENGTH_DAYS,
+    );
     expect(ctx.authService.hashPassword).toHaveBeenCalledWith(PASSWORD);
   });
 
