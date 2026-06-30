@@ -34,4 +34,11 @@ describe('resolveUploadFilePath', () => {
       resolveUploadFilePath(uploadDir, 'data:image/png;base64,xx'),
     ).toThrow(/not allowed/);
   });
+
+  it('throws when resolved path lands in a sibling directory (prefix collision)', () => {
+    const siblingUploadDir = path.resolve('/tmp/uploads');
+    expect(() =>
+      resolveUploadFilePath(siblingUploadDir, '../uploads-evil/secret.jpg'),
+    ).toThrow(/escapes upload directory/);
+  });
 });

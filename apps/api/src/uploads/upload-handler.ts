@@ -1,6 +1,19 @@
+import { randomUUID } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import path from 'node:path';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from '../services/auth.service';
+
+type UploadRequest = {
+  headers: { authorization?: string };
+  file: () => Promise<{ filename: string; file: Readable } | undefined>;
+};
+
+type UploadReply = {
+  status: (code: number) => { send: (body: unknown) => unknown };
+};
 
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
@@ -37,4 +50,42 @@ export function sanitizeUploadExtension(originalFilename: string): string {
   }
 
   return cleaned;
+}
+
+export function createUploadHandler(deps: {
+  uploadDir: string;
+  authService: Pick<AuthService, 'verifyToken'>;
+  prisma: Pick<PrismaService, 'user'>;
+}) {
+  const { uploadDir, authService, prisma } = deps;
+
+  return async (request: UploadRequest, reply: UploadReply) => {
+    const auth = await authenticateUpload(request.headers.authorization, {
+      authService,
+      prisma,
+    });
+    if (!auth) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const data = await request.file();
+
+    if (!data) {
+      return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    let ext: string;
+    try {
+      ext = sanitizeUploadExtension(data.filename);
+    } catch {
+      return reply.status(400).send({ error: 'Unsupported file type' });
+    }
+
+    const filename = `${randomUUID()}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    await pipeline(data.file, createWriteStream(filepath));
+
+    return { url: `/uploads/${filename}` };
+  };
 }

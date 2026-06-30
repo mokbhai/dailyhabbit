@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   authenticateUpload,
+  createUploadHandler,
   sanitizeUploadExtension,
 } from '../src/uploads/upload-handler';
 
@@ -68,6 +69,31 @@ describe('authenticateUpload', () => {
       where: { id: USER_ID },
       select: { id: true },
     });
+  });
+});
+
+describe('createUploadHandler', () => {
+  it('returns 401 without parsing multipart when authorization is missing', async () => {
+    const file = vi.fn();
+    const request = {
+      headers: {},
+      file,
+    };
+    const send = vi.fn();
+    const status = vi.fn(() => ({ send }));
+    const reply = { status };
+
+    const handler = createUploadHandler({
+      uploadDir: '/tmp/uploads',
+      authService: { verifyToken: () => null },
+      prisma: { user: { findUnique: vi.fn() } },
+    });
+
+    await handler(request as never, reply as never);
+
+    expect(status).toHaveBeenCalledWith(401);
+    expect(send).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    expect(file).not.toHaveBeenCalled();
   });
 });
 

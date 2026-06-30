@@ -1,9 +1,6 @@
 import 'reflect-metadata';
-import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
@@ -17,10 +14,7 @@ import { ActivitiesService } from './services/activities.service';
 import { GuidanceService } from './services/guidance.service';
 import { appRouter } from './trpc/router';
 import { createContextFactory } from './trpc/context';
-import {
-  authenticateUpload,
-  sanitizeUploadExtension,
-} from './uploads/upload-handler';
+import { createUploadHandler } from './uploads/upload-handler';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -89,35 +83,10 @@ async function bootstrap() {
     decorateReply: false,
   });
 
-  fastify.post('/api/uploads', async (request, reply) => {
-    const auth = await authenticateUpload(request.headers.authorization, {
-      authService,
-      prisma,
-    });
-    if (!auth) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-
-    const data = await request.file();
-
-    if (!data) {
-      return reply.status(400).send({ error: 'No file uploaded' });
-    }
-
-    let ext: string;
-    try {
-      ext = sanitizeUploadExtension(data.filename);
-    } catch {
-      return reply.status(400).send({ error: 'Unsupported file type' });
-    }
-
-    const filename = `${randomUUID()}${ext}`;
-    const filepath = path.join(uploadDir, filename);
-
-    await pipeline(data.file, createWriteStream(filepath));
-
-    return { url: `/uploads/${filename}` };
-  });
+  fastify.post(
+    '/api/uploads',
+    createUploadHandler({ uploadDir, authService, prisma }),
+  );
 
   await fastify.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
