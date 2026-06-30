@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -12,12 +12,35 @@ export type JwtPayload = {
   email?: string | null;
 };
 
+const DEFAULT_JWT_SECRET = 'change-me';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly jwtSecret: string;
 
   constructor(private readonly config: ConfigService) {
-    this.jwtSecret = this.config.get<string>('JWT_SECRET') ?? 'change-me';
+    const configuredSecret =
+      this.config.get<string>('JWT_SECRET')?.trim() || undefined;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // Default/missing secrets are publicly known; production must use a strong JWT_SECRET or tokens are forgeable.
+    if (
+      isProduction &&
+      (!configuredSecret || configuredSecret === DEFAULT_JWT_SECRET)
+    ) {
+      throw new Error(
+        'JWT_SECRET must be set to a strong secret in production. Set the JWT_SECRET environment variable before starting the API.',
+      );
+    }
+
+    this.jwtSecret = configuredSecret ?? DEFAULT_JWT_SECRET;
+
+    if (!isProduction && !configuredSecret) {
+      this.logger.warn(
+        'JWT_SECRET is unset; using the default development secret. Do not use this in production.',
+      );
+    }
   }
 
   async hashPassword(password: string): Promise<string> {
