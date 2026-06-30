@@ -127,6 +127,50 @@ describe('TaskCard', () => {
 
     expect(onTierSelect).toHaveBeenCalledWith('NONE');
   });
+
+  it('shows guidance when info button is clicked without marking done', async () => {
+    const onMarkDone = vi.fn();
+    render(
+      <TaskCard
+        icon="🥗"
+        title="Diet"
+        kind="SUBPOINTS"
+        log={null}
+        canEdit
+        subPoints={[{ key: 'NO_JUNK', label: 'No junk', xp: 70 }]}
+        onMarkDone={onMarkDone}
+        onSubPointChange={vi.fn()}
+        guidance={{
+          ruleBlock: 'Eat whole foods daily.',
+          tips: {
+            title: 'Diet tips',
+            bullets: ['Prep vegetables ahead.', 'Choose protein first.'],
+          },
+          subPoints: {
+            NO_JUNK: {
+              ruleBlock:
+                'Salad with mayonnaise counts as junk — use yogurt dressing.',
+              tips: {
+                title: 'Skip junk',
+                bullets: ['Swap chips for nuts.'],
+              },
+            },
+          },
+        }}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show guidance' }),
+    );
+
+    expect(onMarkDone).not.toHaveBeenCalled();
+    expect(screen.getByText('Rules')).toBeInTheDocument();
+    expect(screen.getByText('Eat whole foods daily.')).toBeInTheDocument();
+    expect(screen.getByText(/mayonnaise counts as junk/i)).toBeInTheDocument();
+    expect(screen.getByText('Diet tips')).toBeInTheDocument();
+    expect(screen.getByText('Prep vegetables ahead.')).toBeInTheDocument();
+  });
 });
 
 describe('NumberStepper', () => {
