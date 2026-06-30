@@ -4,10 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": false,
-    "declarationMap": false,
-    "paths": {
-      "@workspace-starter/types": ["../../packages/types/src/index.ts"]
-    }
+    "declarationMap": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test"]

@@ -171,6 +171,53 @@ describe('TaskCard', () => {
     expect(screen.getByText('Diet tips')).toBeInTheDocument();
     expect(screen.getByText('Prep vegetables ahead.')).toBeInTheDocument();
   });
+
+  it('shows Ask AI in guidance panel without marking done', async () => {
+    const onMarkDone = vi.fn();
+    const onAskGuidance = vi.fn(async () => ({
+      available: true,
+      answer: 'Use yogurt dressing instead of mayo.',
+    }));
+
+    render(
+      <TaskCard
+        icon="🥗"
+        title="Diet"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+        onMarkDone={onMarkDone}
+        guidance={{
+          ruleBlock: 'Eat whole foods daily.',
+          tips: {
+            title: 'Diet tips',
+            bullets: ['Prep vegetables ahead.'],
+          },
+        }}
+        onAskGuidance={onAskGuidance}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show guidance' }),
+    );
+    expect(onMarkDone).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ask AI' }));
+    expect(onMarkDone).not.toHaveBeenCalled();
+
+    const input = screen.getByPlaceholderText('Ask about this activity…');
+    await userEvent.type(input, 'Is mayo ok?');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onAskGuidance).toHaveBeenCalledWith({
+      question: 'Is mayo ok?',
+      history: [],
+    });
+    expect(
+      await screen.findByText('Use yogurt dressing instead of mayo.'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('NumberStepper', () => {

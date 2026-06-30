@@ -7,11 +7,13 @@ import { leaderboardRouter } from './routers/leaderboard.router';
 import { profileRouter } from './routers/profile.router';
 import { statsRouter } from './routers/stats.router';
 import { activitiesRouter } from './routers/activities.router';
+import { guidanceRouter } from './routers/guidance.router';
 
 export const appRouter = router({
   auth: authRouter,
   groups: groupsRouter,
   activities: activitiesRouter,
+  guidance: guidanceRouter,
   stats: statsRouter,
   heatmap: heatmapRouter,
   leaderboard: leaderboardRouter,

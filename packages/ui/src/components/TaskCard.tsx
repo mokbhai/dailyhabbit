@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { cn } from '../utils/cn';
 import { NumberStepper } from './NumberStepper';
 import { TierChips, type TierOption } from './TierChips';
@@ -35,6 +35,16 @@ export type TaskGuidance = {
   subPoints?: Record<string, TaskGuidanceSubPoint>;
 };
 
+export type GuidanceChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+export type GuidanceAskResult = {
+  available: boolean;
+  answer: string | null;
+};
+
 export type ActivityLogView = {
   state: SubPointState | null;
   value: number | null;
@@ -64,6 +74,10 @@ export type TaskCardProps = {
   onSubPointChange?: (states: Record<string, SubPointState>) => void;
   expandedContent?: ReactNode;
   guidance?: TaskGuidance;
+  onAskGuidance?: (params: {
+    question: string;
+    history: GuidanceChatMessage[];
+  }) => Promise<GuidanceAskResult>;
   disabled?: boolean;
   className?: string;
 };
@@ -154,76 +168,190 @@ function bodyTapEnabled(kind: ActivityKind): boolean {
 function GuidancePanel({
   guidance,
   subPointLabels,
+  onAskGuidance,
 }: {
-  guidance: TaskGuidance;
+  guidance?: TaskGuidance;
   subPointLabels?: Record<string, string>;
+  onAskGuidance?: (params: {
+    question: string;
+    history: GuidanceChatMessage[];
+  }) => Promise<GuidanceAskResult>;
 }) {
-  const subPointEntries = guidance.subPoints
+  const [askOpen, setAskOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [history, setHistory] = useState<GuidanceChatMessage[]>([]);
+  const [pending, setPending] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+
+  const subPointEntries = guidance?.subPoints
     ? Object.entries(guidance.subPoints)
     : [];
 
+  async function handleAskSubmit(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = question.trim();
+    if (!trimmed || !onAskGuidance || pending) return;
+
+    setPending(true);
+    setUnavailable(false);
+
+    try {
+      const result = await onAskGuidance({ question: trimmed, history });
+      if (!result.available || !result.answer) {
+        setUnavailable(true);
+        return;
+      }
+
+      setHistory((prev) => [
+        ...prev,
+        { role: 'user', content: trimmed },
+        { role: 'assistant', content: result.answer as string },
+      ]);
+      setQuestion('');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="space-y-4 text-sm text-[var(--text-muted)]">
-      <div>
-        <p
-          className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          Rules
-        </p>
-        <p className="leading-relaxed text-[var(--text-primary)]">
-          {guidance.ruleBlock}
-        </p>
-      </div>
-
-      {subPointEntries.length > 0 && (
-        <div className="space-y-3">
-          {subPointEntries.map(([key, sub]) => (
-            <div
-              key={key}
-              className="rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2"
+      {guidance && (
+        <>
+          <div>
+            <p
+              className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
             >
-              <p
-                className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {subPointLabels?.[key] ?? key}
-              </p>
-              <p className="leading-relaxed">{sub.ruleBlock}</p>
+              Rules
+            </p>
+            <p className="leading-relaxed text-[var(--text-primary)]">
+              {guidance.ruleBlock}
+            </p>
+          </div>
+
+          {subPointEntries.length > 0 && (
+            <div className="space-y-3">
+              {subPointEntries.map(([key, sub]) => (
+                <div
+                  key={key}
+                  className="rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2"
+                >
+                  <p
+                    className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    {subPointLabels?.[key] ?? key}
+                  </p>
+                  <p className="leading-relaxed">{sub.ruleBlock}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          <div>
+            <p
+              className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {guidance.tips.title}
+            </p>
+            <ul className="list-disc space-y-1 pl-4 leading-relaxed">
+              {guidance.tips.bullets.map((bullet) => (
+                <li key={bullet}>{bullet}</li>
+              ))}
+            </ul>
+            {guidance.tips.links && guidance.tips.links.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {guidance.tips.links.map((link) => (
+                  <li key={link.url}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--accent-red)] underline-offset-2 hover:underline"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
       )}
 
-      <div>
-        <p
-          className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          {guidance.tips.title}
-        </p>
-        <ul className="list-disc space-y-1 pl-4 leading-relaxed">
-          {guidance.tips.bullets.map((bullet) => (
-            <li key={bullet}>{bullet}</li>
-          ))}
-        </ul>
-        {guidance.tips.links && guidance.tips.links.length > 0 && (
-          <ul className="mt-2 space-y-1">
-            {guidance.tips.links.map((link) => (
-              <li key={link.url}>
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[var(--accent-red)] underline-offset-2 hover:underline"
+      {onAskGuidance && (
+        <div className="border-t border-[var(--border)] pt-4">
+          {!askOpen ? (
+            <button
+              type="button"
+              onClick={() => setAskOpen(true)}
+              className="rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)] transition hover:border-[var(--accent-red)] hover:text-[var(--accent-red)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              Ask AI
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                Ask AI
+              </p>
+
+              {history.length > 0 && (
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2">
+                  {history.map((message, index) => (
+                    <p
+                      key={`${message.role}-${index}`}
+                      className={cn(
+                        'leading-relaxed',
+                        message.role === 'user'
+                          ? 'text-[var(--text-primary)]'
+                          : 'text-[var(--text-muted)]',
+                      )}
+                    >
+                      <span
+                        className="mr-1 text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                      >
+                        {message.role === 'user' ? 'You' : 'AI'}
+                      </span>
+                      {message.content}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {unavailable && (
+                <p className="text-xs text-[var(--accent-red)]">
+                  AI help unavailable
+                </p>
+              )}
+
+              <form onSubmit={handleAskSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="Ask about this activity…"
+                  disabled={pending}
+                  className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={pending || !question.trim()}
+                  className="shrink-0 rounded border border-[var(--accent-red)] bg-[var(--accent-red)]/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-red)] transition hover:bg-[var(--accent-red)]/20 disabled:opacity-50"
+                  style={{ fontFamily: 'var(--font-mono)' }}
                 >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  {pending ? '…' : 'Send'}
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -247,6 +375,7 @@ export function TaskCard({
   onSubPointChange,
   expandedContent,
   guidance,
+  onAskGuidance,
   disabled = false,
   className,
 }: TaskCardProps) {
@@ -330,7 +459,7 @@ export function TaskCard({
           </span>
         </button>
 
-        {guidance && (
+        {(guidance || onAskGuidance) && (
           <button
             type="button"
             aria-expanded={guidanceOpen}
@@ -360,9 +489,13 @@ export function TaskCard({
         )}
       </div>
 
-      {guidanceOpen && guidance && (
+      {guidanceOpen && (guidance || onAskGuidance) && (
         <div className="border-t border-[var(--border)] px-4 py-4">
-          <GuidancePanel guidance={guidance} subPointLabels={subPointLabels} />
+          <GuidancePanel
+            guidance={guidance}
+            subPointLabels={subPointLabels}
+            onAskGuidance={onAskGuidance}
+          />
         </div>
       )}
 

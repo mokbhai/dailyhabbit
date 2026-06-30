@@ -2,6 +2,7 @@ import type { CreateFastifyContextOptions } from '@trpc/server/adapters/fastify'
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from '../services/auth.service';
 import type { ActivitiesService } from '../services/activities.service';
+import type { GuidanceService } from '../services/guidance.service';
 
 export type AuthUser = {
   id: string;
@@ -14,6 +15,7 @@ export function createContextFactory(deps: {
   prisma: PrismaService;
   authService: AuthService;
   activitiesService: ActivitiesService;
+  guidanceService: GuidanceService;
 }) {
   return async function createContext({
     req,
@@ -28,6 +30,7 @@ export function createContextFactory(deps: {
       prisma: deps.prisma,
       authService: deps.authService,
       activitiesService: deps.activitiesService,
+      guidanceService: deps.guidanceService,
     };
   };
 }

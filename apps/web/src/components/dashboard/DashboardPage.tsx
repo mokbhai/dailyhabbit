@@ -202,6 +202,8 @@ function ActivityCard({
     isPending,
   } = mutations;
 
+  const askGuidance = trpc.guidance.ask.useMutation();
+
   return (
     <TaskCard
       icon={activity.emoji ?? '✅'}
@@ -227,6 +229,13 @@ function ActivityCard({
         setSubPoints.mutate({ activityId: activity.id, states })
       }
       guidance={getGuidance(activity.seedKey)}
+      onAskGuidance={async ({ question, history }) =>
+        askGuidance.mutateAsync({
+          activityId: activity.id,
+          question,
+          history,
+        })
+      }
       expandedContent={
         activity.canAttachProof ? (
           <ProofSection

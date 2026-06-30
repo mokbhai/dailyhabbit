@@ -16,6 +16,7 @@ function createTestContext(overrides: Partial<Context> = {}): Context {
       detectTimezone: () => 'UTC',
     } as Context['authService'],
     activitiesService: {} as Context['activitiesService'],
+    guidanceService: {} as Context['guidanceService'],
     ...overrides,
   };
 }
@@ -26,6 +27,7 @@ describe('appRouter', () => {
     expect(appRouter._def.procedures).toHaveProperty('groups.create');
     expect(appRouter._def.procedures).toHaveProperty('activities.getToday');
     expect(appRouter._def.procedures).toHaveProperty('activities.markActivity');
+    expect(appRouter._def.procedures).toHaveProperty('guidance.ask');
     expect(appRouter._def.procedures).toHaveProperty('leaderboard.get');
   });
 

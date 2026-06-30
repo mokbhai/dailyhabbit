@@ -37,6 +37,8 @@ export { TaskCard } from './components/TaskCard';
 export type {
   ActivityKind,
   ActivityLogView,
+  GuidanceAskResult,
+  GuidanceChatMessage,
   SubPointConfig,
   SubPointState,
   TaskCardProps,
