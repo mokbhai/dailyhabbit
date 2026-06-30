@@ -5,9 +5,8 @@ import {
   mapActivityToScored,
   mapLogToInput,
 } from '../services/activities.service';
-import { computeDayScore } from '../services/scoring.service';
+import { evaluateDayRollover } from '../services/day-finalizer';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
-import { computeDayLoggingStatus } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 
 @Injectable()
@@ -103,27 +102,19 @@ export class DayEvaluatorService {
       },
     });
 
-    const scoredActivityIds = scoredActivities.map((activity) => activity.id);
-    const { allScoredLogged } = computeDayLoggingStatus(
-      scoredActivityIds,
-      activityLogs.map((log) => ({
-        activityId: log.activityId,
-        state: log.state,
-        tier: log.tier,
-        value: log.value,
-        subPoints: log.subPoints,
-      })),
-    );
+    const personalActivities = activities.filter((a) => a.isPersonal);
 
-    const logsById = Object.fromEntries(
-      activityLogs.map((log) => [log.activityId, mapLogToInput(log)]),
-    );
-
-    const score = computeDayScore(
-      activities.map(mapActivityToScored),
-      logsById,
-      { applyGrace: true },
-    );
+    const result = evaluateDayRollover({
+      challenge: {
+        currentDay: challenge.currentDay,
+        lengthDays: challenge.lengthDays,
+        currentStreak: challenge.currentStreak,
+        longestStreak: challenge.longestStreak,
+      },
+      scoredActivities: scoredActivities.map(mapActivityToScored),
+      personalActivities: personalActivities.map(mapActivityToScored),
+      previousDayLogs: activityLogs.map(mapLogToInput),
+    });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.dayScore.upsert({
@@ -137,37 +128,34 @@ export class DayEvaluatorService {
           challengeId: challenge.id,
           userId,
           date: previousDay,
-          dayNumber: challenge.currentDay,
-          netXp: score.netXp,
-          xpEarned: score.xpEarned,
-          xpDeducted: score.xpDeducted,
-          personalXp: score.personalXp,
-          breakdown: { allScoredLogged, entries: score.breakdown },
+          dayNumber: result.dayScore.dayNumber,
+          netXp: result.dayScore.netXp,
+          xpEarned: result.dayScore.xpEarned,
+          xpDeducted: result.dayScore.xpDeducted,
+          personalXp: result.dayScore.personalXp,
+          breakdown: result.dayScore.breakdown,
           finalized: true,
         },
         update: {
-          netXp: score.netXp,
-          xpEarned: score.xpEarned,
-          xpDeducted: score.xpDeducted,
-          personalXp: score.personalXp,
-          breakdown: { allScoredLogged, entries: score.breakdown },
+          netXp: result.dayScore.netXp,
+          xpEarned: result.dayScore.xpEarned,
+          xpDeducted: result.dayScore.xpDeducted,
+          personalXp: result.dayScore.personalXp,
+          breakdown: result.dayScore.breakdown,
           finalized: true,
         },
       });
 
-      const newStreak = allScoredLogged ? challenge.currentStreak + 1 : 0;
-      const newLongestStreak = Math.max(challenge.longestStreak, newStreak);
-      const newDay = challenge.currentDay + 1;
-      const completed = newDay > challenge.lengthDays;
-
       await tx.challenge.update({
         where: { id: challenge.id },
         data: {
-          currentDay: completed ? challenge.lengthDays + 1 : newDay,
-          currentStreak: newStreak,
-          longestStreak: newLongestStreak,
-          totalXp: { increment: score.netXp },
-          ...(completed ? { isActive: false, endDate: new Date() } : {}),
+          currentDay: result.challengeUpdate.currentDay,
+          currentStreak: result.challengeUpdate.currentStreak,
+          longestStreak: result.challengeUpdate.longestStreak,
+          totalXp: { increment: result.challengeUpdate.totalXpIncrement },
+          ...(result.challengeUpdate.completed
+            ? { isActive: false, endDate: new Date() }
+            : {}),
         },
       });
     });
