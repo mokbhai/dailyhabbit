@@ -14,6 +14,7 @@ import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './services/auth.service';
 import { ActivitiesService } from './services/activities.service';
+import { GuidanceService } from './services/guidance.service';
 import { appRouter } from './trpc/router';
 import { createContextFactory } from './trpc/context';
 
@@ -60,10 +61,12 @@ async function bootstrap() {
   const prisma = app.get(PrismaService);
   const authService = app.get(AuthService);
   const activitiesService = app.get(ActivitiesService);
+  const guidanceService = app.get(GuidanceService);
   const createContext = createContextFactory({
     prisma,
     authService,
     activitiesService,
+    guidanceService,
   });
 
   const fastify = app.getHttpAdapter().getInstance();
