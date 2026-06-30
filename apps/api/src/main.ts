@@ -17,6 +17,10 @@ import { ActivitiesService } from './services/activities.service';
 import { GuidanceService } from './services/guidance.service';
 import { appRouter } from './trpc/router';
 import { createContextFactory } from './trpc/context';
+import {
+  authenticateUpload,
+  sanitizeUploadExtension,
+} from './uploads/upload-handler';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -86,13 +90,27 @@ async function bootstrap() {
   });
 
   fastify.post('/api/uploads', async (request, reply) => {
+    const auth = await authenticateUpload(request.headers.authorization, {
+      authService,
+      prisma,
+    });
+    if (!auth) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
     const data = await request.file();
 
     if (!data) {
       return reply.status(400).send({ error: 'No file uploaded' });
     }
 
-    const ext = path.extname(data.filename);
+    let ext: string;
+    try {
+      ext = sanitizeUploadExtension(data.filename);
+    } catch {
+      return reply.status(400).send({ error: 'Unsupported file type' });
+    }
+
     const filename = `${randomUUID()}${ext}`;
     const filepath = path.join(uploadDir, filename);
 

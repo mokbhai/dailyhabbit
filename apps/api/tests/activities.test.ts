@@ -800,7 +800,7 @@ describe('activities service', () => {
         fake.prisma,
         USER_ID,
         DIET_ACTIVITY_ID,
-        'https://example.com/photo.jpg',
+        '/uploads/abc-def_123.jpg',
       ),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 

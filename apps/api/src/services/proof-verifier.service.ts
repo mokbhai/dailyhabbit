@@ -118,21 +118,9 @@ export class ProofVerifierService {
   }
 
   private async resolveImageUrl(imageUrl: string): Promise<string> {
-    if (/^https?:\/\//i.test(imageUrl)) {
-      return imageUrl;
-    }
-
-    if (/^data:/i.test(imageUrl)) {
-      return imageUrl;
-    }
-
-    const relativePath = imageUrl.startsWith('/uploads/')
-      ? imageUrl.slice('/uploads/'.length)
-      : imageUrl.replace(/^\/+/, '');
-
-    const filePath = path.join(this.uploadDir, relativePath);
+    const filePath = resolveUploadFilePath(this.uploadDir, imageUrl);
     const buffer = await readFile(filePath);
-    const ext = path.extname(relativePath).toLowerCase();
+    const ext = path.extname(filePath).toLowerCase();
     const mime =
       ext === '.png'
         ? 'image/png'
@@ -142,6 +130,34 @@ export class ProofVerifierService {
 
     return `data:${mime};base64,${buffer.toString('base64')}`;
   }
+}
+
+/** Resolve a proof image to a filesystem path confined under uploadDir. */
+export function resolveUploadFilePath(
+  uploadDir: string,
+  imageUrl: string,
+): string {
+  // Never fetch or read arbitrary remote/embedded content server-side (SSRF / data-URI abuse).
+  if (/^[a-z][a-z0-9+.-]*:/i.test(imageUrl)) {
+    throw new Error('External or scheme URLs are not allowed');
+  }
+
+  const relativePath = imageUrl.startsWith('/uploads/')
+    ? imageUrl.slice('/uploads/'.length)
+    : imageUrl.replace(/^\/+/, '');
+
+  const normalizedUploadDir = path.resolve(uploadDir);
+  const resolved = path.resolve(normalizedUploadDir, relativePath);
+
+  // Block .. traversal: resolved path must stay inside uploadDir.
+  if (
+    resolved !== normalizedUploadDir &&
+    !resolved.startsWith(normalizedUploadDir + path.sep)
+  ) {
+    throw new Error('Path escapes upload directory');
+  }
+
+  return resolved;
 }
 
 // Re-export for tests that may import parsePromptMarkdown from here
