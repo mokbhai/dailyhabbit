@@ -2,6 +2,20 @@
 
 > **dailyhabbit** monorepo — Astro static frontend · NestJS + tRPC API · Prisma · SQLite (local) / libSQL (server) · OpenAI vision verification.
 
+> ⚠️ **STATUS — SUPERSEDED AS THE ACTIVE PLAN.** This document describes the original
+> **strict 75 Hard** mechanic: pass/fail elimination ("miss one task → restart Day 1"),
+> AI vision verification as a hard gate, and required photo proof (incl. diet photos).
+> The product has since pivoted to the **Discipline Challenge** (honor-system XP economy,
+> one-tap logging, AI demoted to an optional background bonus). The **active, authoritative
+> specs are the five phase docs in [`docs/superpowers/specs/`](./superpowers/specs/)**
+> (Phase 1 Core → Phase 5 Custom Activities & Data).
+>
+> This doc is retained as the **future "hard mode" target**: per the agreed strategy, run
+> the softer Discipline Challenge first; if it sustains engagement, evolve back toward the
+> strict mechanic described here. Treat anything below that conflicts with the phase docs
+> (elimination, AI gating, mandatory diet/progress photos, hardcoded 6-task forms) as the
+> *future* direction, not current scope.
+
 ---
 
 ## Project Overview
