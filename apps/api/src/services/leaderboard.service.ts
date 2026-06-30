@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
-import { computeCurrentStreak } from './tasks.service';
-import { getUserLocalDate } from '../utils/day-window';
+import { latestChallengeRelationArgs } from '../utils/challenge-query';
+import { isInterimDayCompleted } from '../utils/day-completion';
 import { getMemberStatus } from '../utils/member-status';
 
 export type LeaderboardSortBy = 'day' | 'successRate' | 'streak' | 'name';
@@ -12,7 +12,7 @@ export type LeaderboardMember = {
   name: string;
   avatarUrl: string | null;
   currentDay: number;
-  status: 'ACTIVE' | 'ELIMINATED' | 'COMPLETED';
+  status: 'ACTIVE' | 'COMPLETED';
   streak: number;
   successRate: number;
 };
@@ -22,10 +22,13 @@ export type LeaderboardResult = {
   podium: LeaderboardMember[];
 };
 
-function computeSuccessRate(dayResults: { completed: boolean }[]): number {
-  if (dayResults.length === 0) return 0;
-  const completed = dayResults.filter((d) => d.completed).length;
-  return Math.round((completed / dayResults.length) * 100);
+function computeSuccessRate(
+  dayScores: { finalized: boolean; breakdown: unknown }[],
+): number {
+  const finalized = dayScores.filter((d) => d.finalized);
+  if (finalized.length === 0) return 0;
+  const completed = finalized.filter((d) => isInterimDayCompleted(d)).length;
+  return Math.round((completed / finalized.length) * 100);
 }
 
 function sortMembers(
@@ -75,56 +78,33 @@ export async function getLeaderboard(
     where: { groupId: user.groupId },
     select: {
       id: true,
-      timezone: true,
       name: true,
       avatarUrl: true,
-      attempts: {
-        where: { isActive: true },
-        take: 1,
+      challenges: {
+        ...latestChallengeRelationArgs(),
         include: {
-          dayResults: { select: { completed: true } },
+          dayScores: { select: { finalized: true, breakdown: true } },
         },
       },
     },
   });
 
-  const entries = await Promise.all(
-    members.map(async (member) => {
-      const attempt = member.attempts[0] ?? null;
-      const currentDay = attempt?.currentDay ?? 0;
-      let streak = 0;
+  const entries = members.map((member) => {
+    const challenge = member.challenges[0] ?? null;
+    const currentDay = challenge?.currentDay ?? 0;
+    const streak = challenge?.currentStreak ?? 0;
+    const successRate = challenge ? computeSuccessRate(challenge.dayScores) : 0;
 
-      if (attempt) {
-        const todayDate = getUserLocalDate(member.timezone);
-        const todayLogs = await prisma.taskLog.findMany({
-          where: {
-            attemptId: attempt.id,
-            userId: member.id,
-            date: todayDate,
-          },
-          select: {
-            taskType: true,
-            isValid: true,
-            aiVerdict: true,
-            completedAt: true,
-          },
-        });
-        streak = computeCurrentStreak(attempt.currentDay, todayLogs);
-      }
-
-      const successRate = attempt ? computeSuccessRate(attempt.dayResults) : 0;
-
-      return {
-        id: member.id,
-        name: member.name,
-        avatarUrl: member.avatarUrl,
-        currentDay,
-        status: getMemberStatus(attempt),
-        streak,
-        successRate,
-      };
-    }),
-  );
+    return {
+      id: member.id,
+      name: member.name,
+      avatarUrl: member.avatarUrl,
+      currentDay,
+      status: getMemberStatus(challenge),
+      streak,
+      successRate,
+    };
+  });
 
   const sorted = sortMembers(entries, sortBy);
   const ranked: LeaderboardMember[] = sorted.map((entry, index) => ({
