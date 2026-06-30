@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import type { Activity } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
-import { challengeDisplayOrderBy } from '../utils/challenge-query';
+import {
+  challengeDisplayOrderBy,
+  DEFAULT_CHALLENGE_LENGTH_DAYS,
+} from '../utils/challenge-query';
 import { isInterimDayCompleted } from '../utils/day-completion';
 import {
   addLocalDays,
@@ -84,7 +87,7 @@ export async function getDashboardStats(
       })
     : 0;
 
-  const lengthDays = challenge?.lengthDays ?? 30;
+  const lengthDays = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
   const daysRemaining = challenge
     ? Math.max(0, lengthDays - (challenge.currentDay - 1))
     : lengthDays;
