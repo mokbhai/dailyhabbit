@@ -13,12 +13,24 @@ function phoneToLocalInput(e164: string | null): string {
   return e164.replace(/^\+\d+/, '');
 }
 
+function getTimezoneOptions(currentTimezone: string): string[] {
+  const supported =
+    typeof Intl.supportedValuesOf === 'function'
+      ? Intl.supportedValuesOf('timeZone')
+      : [currentTimezone];
+  if (!supported.includes(currentTimezone)) {
+    return [currentTimezone, ...supported];
+  }
+  return supported;
+}
+
 function ProfileContent() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [reminderTime, setReminderTime] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,6 +68,7 @@ function ProfileContent() {
       setPhone(phoneToLocalInput(profile.data.phone));
       setEmail(profile.data.email ?? '');
       setReminderTime(profile.data.reminderTime ?? '');
+      setTimezone(profile.data.timezone);
       setWhatsappOptIn(profile.data.whatsappOptIn);
     }
   }, [profile.data]);
@@ -126,6 +139,7 @@ function ProfileContent() {
   }
 
   const data = profile.data!;
+  const timezoneOptions = getTimezoneOptions(data.timezone);
 
   return (
     <div className="mx-auto max-w-lg space-y-8 px-4 py-8">
@@ -204,6 +218,7 @@ function ProfileContent() {
                 : undefined,
             password: password || undefined,
             reminderTime: reminderTime || null,
+            timezone: timezone !== data.timezone ? timezone : undefined,
           });
         }}
         className="space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6"
@@ -270,6 +285,35 @@ function ProfileContent() {
             placeholder="Leave blank to keep current"
             className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Timezone
+          </label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
+          >
+            {timezoneOptions.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Controls when your day resets and when reminders are sent.
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
+            }
+            className="mt-2 text-xs text-[var(--accent-red)] hover:underline"
+          >
+            Detect from browser
+          </button>
         </div>
 
         <div>

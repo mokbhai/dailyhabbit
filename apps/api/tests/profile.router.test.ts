@@ -191,3 +191,27 @@ describe('profileRouter whatsappOptIn', () => {
     expect((await caller.get()).whatsappOptIn).toBe(true);
   });
 });
+
+describe('profileRouter timezone', () => {
+  it('persists a valid timezone on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ timezone: 'America/New_York' });
+
+    expect(result.timezone).toBe('America/New_York');
+    expect(stores.users.get(USER_ID)?.timezone).toBe('America/New_York');
+  });
+
+  it('rejects an invalid timezone on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ timezone: 'Not/AZone' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Invalid timezone',
+    } satisfies Partial<TRPCError>);
+  });
+});
