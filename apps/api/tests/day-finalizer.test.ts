@@ -457,6 +457,26 @@ function createCronFakePrisma(seed: CronFakeSeed) {
       }: {
         where: { challengeId: string; date: Date };
       }) => dayScores.get(dayScoreKey(where.challengeId, where.date)) ?? null,
+      findUnique: async ({
+        where,
+        select,
+      }: {
+        where: { challengeId_date: { challengeId: string; date: Date } };
+        select?: { finalized?: boolean };
+      }) => {
+        const score =
+          dayScores.get(
+            dayScoreKey(
+              where.challengeId_date.challengeId,
+              where.challengeId_date.date,
+            ),
+          ) ?? null;
+        if (!score) return null;
+        if (!select) return { ...score };
+        return Object.fromEntries(
+          Object.keys(select).map((key) => [key, score[key as keyof DayScore]]),
+        );
+      },
     },
     activityLog: {
       findMany: async ({
@@ -474,6 +494,29 @@ function createCronFakePrisma(seed: CronFakeSeed) {
     $transaction: async (fn: (tx: typeof prisma) => Promise<void>) => {
       const tx = {
         dayScore: {
+          findUnique: async ({
+            where,
+            select,
+          }: {
+            where: { challengeId_date: { challengeId: string; date: Date } };
+            select?: { finalized?: boolean };
+          }) => {
+            const score =
+              dayScores.get(
+                dayScoreKey(
+                  where.challengeId_date.challengeId,
+                  where.challengeId_date.date,
+                ),
+              ) ?? null;
+            if (!score) return null;
+            if (!select) return { ...score };
+            return Object.fromEntries(
+              Object.keys(select).map((key) => [
+                key,
+                score[key as keyof DayScore],
+              ]),
+            );
+          },
           upsert: async (args: Record<string, unknown>) => {
             transactionOps.push({ type: 'dayScore.upsert', ...args });
             const create = args.create as DayScore;
@@ -724,6 +767,71 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(challenge?.currentDay).toBe(6);
     expect(challenge?.currentStreak).toBe(2);
     expect(challenge?.totalXp).toBe(200);
+  });
+
+  it('is idempotent — running twice does not double-increment totalXp', async () => {
+    const { prisma, transactionOps, challenges, dayScores } =
+      createCronFakePrisma({
+        users: [
+          {
+            id: 'user-1',
+            phone: null,
+            email: 'a@b.com',
+            passwordHash: 'x',
+            name: 'User',
+            timezone,
+            groupId: 'group-1',
+            createdAt: new Date(),
+            avatarUrl: null,
+            reminderTime: null,
+          },
+        ],
+        challenges: [
+          {
+            id: 'ch-1',
+            userId: 'user-1',
+            groupId: 'group-1',
+            startDate,
+            endDate: null,
+            lengthDays: 30,
+            currentDay: 5,
+            isActive: true,
+            totalXp: 0,
+            currentStreak: 1,
+            longestStreak: 1,
+          },
+        ],
+        activities: [makeActivity({ id: 'act-1', groupId: 'group-1' })],
+        activityLogs: [
+          {
+            id: 'log-1',
+            challengeId: 'ch-1',
+            userId: 'user-1',
+            activityId: 'act-1',
+            date: previousDay,
+            value: null,
+            tier: null,
+            subPoints: null,
+            state: 'DONE',
+            xpAwarded: 200,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        ],
+      });
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+    await service.evaluateDays();
+
+    const challenge = challenges.get('ch-1');
+    const score = dayScores.get(dayScoreKey('ch-1', previousDay));
+
+    expect(transactionOps).toHaveLength(2);
+    expect(challenge?.totalXp).toBe(200);
+    expect(challenge?.currentDay).toBe(6);
+    expect(challenge?.currentStreak).toBe(2);
+    expect(score?.finalized).toBe(true);
   });
 
   afterEach(() => {

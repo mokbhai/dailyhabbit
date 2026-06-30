@@ -7,6 +7,8 @@ import {
   type Challenge,
 } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
+
+type PrismaClientLike = PrismaService | Prisma.TransactionClient;
 import { computeDayLoggingStatus } from '../utils/day-completion';
 import { getUserLocalDate, isBeforeMidnight } from '../utils/day-window';
 import {
@@ -432,7 +434,7 @@ async function assertPersonalActivityOwnership(
 }
 
 export async function recomputeLiveDayScore(
-  prisma: PrismaService,
+  prisma: PrismaClientLike,
   { challenge, userId, timezone, groupId }: RecomputeParams,
 ): Promise<DayTotals> {
   const today = getUserLocalDate(timezone);
@@ -505,7 +507,7 @@ export async function recomputeLiveDayScore(
 }
 
 async function loadUserActivities(
-  prisma: PrismaService,
+  prisma: PrismaClientLike,
   { userId, groupId }: { userId: string; groupId: string | null },
 ) {
   const orConditions: Prisma.ActivityWhereInput[] = [
@@ -781,42 +783,44 @@ export class ActivitiesService {
 
     const today = getUserLocalDate(ctx.user.timezone);
 
-    const log = await prisma.activityLog.upsert({
-      where: {
-        challengeId_activityId_date: {
+    return prisma.$transaction(async (tx) => {
+      const log = await tx.activityLog.upsert({
+        where: {
+          challengeId_activityId_date: {
+            challengeId: ctx.challenge.id,
+            activityId,
+            date: today,
+          },
+        },
+        create: {
           challengeId: ctx.challenge.id,
+          userId,
           activityId,
           date: today,
+          state: null,
+          value: null,
+          tier: null,
+          subPoints: Prisma.DbNull,
+          xpAwarded: 0,
         },
-      },
-      create: {
-        challengeId: ctx.challenge.id,
+        update: {
+          state: null,
+          value: null,
+          tier: null,
+          subPoints: Prisma.DbNull,
+          xpAwarded: 0,
+        },
+      });
+
+      const dayTotals = await recomputeLiveDayScore(tx, {
+        challenge: ctx.challenge,
         userId,
-        activityId,
-        date: today,
-        state: null,
-        value: null,
-        tier: null,
-        subPoints: Prisma.DbNull,
-        xpAwarded: 0,
-      },
-      update: {
-        state: null,
-        value: null,
-        tier: null,
-        subPoints: Prisma.DbNull,
-        xpAwarded: 0,
-      },
-    });
+        timezone: ctx.user.timezone,
+        groupId: ctx.user.groupId,
+      });
 
-    const dayTotals = await recomputeLiveDayScore(prisma, {
-      challenge: ctx.challenge,
-      userId,
-      timezone: ctx.user.timezone,
-      groupId: ctx.user.groupId,
+      return { log, dayTotals };
     });
-
-    return { log, dayTotals };
   }
 
   async attachProof(
@@ -984,42 +988,44 @@ export class ActivitiesService {
 
     const xpAwarded = computeXpAwarded(scored, logInput);
 
-    const log = await prisma.activityLog.upsert({
-      where: {
-        challengeId_activityId_date: {
+    return prisma.$transaction(async (tx) => {
+      const log = await tx.activityLog.upsert({
+        where: {
+          challengeId_activityId_date: {
+            challengeId: ctx.challenge.id,
+            activityId,
+            date: today,
+          },
+        },
+        create: {
           challengeId: ctx.challenge.id,
+          userId,
           activityId,
           date: today,
+          state,
+          value,
+          tier,
+          subPoints: subPoints ?? undefined,
+          xpAwarded,
         },
-      },
-      create: {
-        challengeId: ctx.challenge.id,
+        update: {
+          state,
+          value,
+          tier,
+          subPoints: subPoints ?? undefined,
+          xpAwarded,
+        },
+      });
+
+      const dayTotals = await recomputeLiveDayScore(tx, {
+        challenge: ctx.challenge,
         userId,
-        activityId,
-        date: today,
-        state,
-        value,
-        tier,
-        subPoints: subPoints ?? undefined,
-        xpAwarded,
-      },
-      update: {
-        state,
-        value,
-        tier,
-        subPoints: subPoints ?? undefined,
-        xpAwarded,
-      },
-    });
+        timezone: ctx.user.timezone,
+        groupId: ctx.user.groupId,
+      });
 
-    const dayTotals = await recomputeLiveDayScore(prisma, {
-      challenge: ctx.challenge,
-      userId,
-      timezone: ctx.user.timezone,
-      groupId: ctx.user.groupId,
+      return { log, dayTotals };
     });
-
-    return { log, dayTotals };
   }
 
   // Activity editor — mid-challenge edits affect scoring FORWARD only; stored

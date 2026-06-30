@@ -395,6 +395,9 @@ function createFakePrisma(seed: FakePrismaSeed) {
         return { count: 0 };
       },
     },
+    $transaction: async <T>(
+      fn: (tx: typeof prisma) => Promise<T>,
+    ): Promise<T> => fn(prisma),
   };
 
   return {
