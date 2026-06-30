@@ -377,6 +377,26 @@ function ProfileContent() {
 
       <PersonalActivitiesSection />
 
+      {data.isGroupAdmin && (
+        <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <h2 className="text-sm uppercase tracking-wider text-[var(--text-muted)]">
+            Admin
+          </h2>
+          <a
+            href="/admin/activities"
+            className="block w-full rounded border border-[var(--border)] py-3 text-center text-sm uppercase tracking-wider text-[var(--text-primary)] hover:border-[var(--accent-red)]"
+          >
+            Edit Activities
+          </a>
+          <a
+            href="/admin/group"
+            className="block w-full rounded border border-[var(--border)] py-3 text-center text-sm uppercase tracking-wider text-[var(--text-primary)] hover:border-[var(--accent-red)]"
+          >
+            Group Settings
+          </a>
+        </div>
+      )}
+
       <div className="space-y-3">
         <button
           type="button"
