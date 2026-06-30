@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { exportHistoryCsv, listHistory } from '../../services/history.service';
-import { LEGACY_TASK_TYPES } from '../../services/tasks.service';
+import { LEGACY_TASK_TYPES } from '../../services/activities.service';
 import { protectedProcedure, router } from '../trpc';
 
 const filtersSchema = z.object({

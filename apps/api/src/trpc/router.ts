@@ -6,12 +6,12 @@ import { historyRouter } from './routers/history.router';
 import { leaderboardRouter } from './routers/leaderboard.router';
 import { profileRouter } from './routers/profile.router';
 import { statsRouter } from './routers/stats.router';
-import { tasksRouter } from './routers/tasks.router';
+import { activitiesRouter } from './routers/activities.router';
 
 export const appRouter = router({
   auth: authRouter,
   groups: groupsRouter,
-  tasks: tasksRouter,
+  activities: activitiesRouter,
   stats: statsRouter,
   heatmap: heatmapRouter,
   leaderboard: leaderboardRouter,

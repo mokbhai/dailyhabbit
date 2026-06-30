@@ -10,11 +10,11 @@ import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
 function LeaderboardContent() {
-  const [sortBy, setSortBy] = useState<LeaderboardSortBy>('day');
+  const [sortBy, setSortBy] = useState<LeaderboardSortBy>('xp');
   const me = trpc.auth.me.useQuery();
 
   const leaderboard = trpc.leaderboard.get.useQuery(
-    { sortBy },
+    { window: 'total', sortBy },
     { refetchInterval: 60_000 },
   );
 

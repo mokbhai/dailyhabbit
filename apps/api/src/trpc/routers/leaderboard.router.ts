@@ -2,12 +2,25 @@ import { z } from 'zod';
 import { getLeaderboard } from '../../services/leaderboard.service';
 import { protectedProcedure, router } from '../trpc';
 
-const sortBySchema = z.enum(['day', 'successRate', 'streak', 'name']);
+const windowSchema = z.enum(['today', 'week', 'total']);
+const sortBySchema = z.enum(['xp', 'streak', 'name', 'day', 'successRate']);
 
 export const leaderboardRouter = router({
   get: protectedProcedure
-    .input(z.object({ sortBy: sortBySchema.optional() }).optional())
+    .input(
+      z
+        .object({
+          window: windowSchema.default('today'),
+          sortBy: sortBySchema.optional(),
+        })
+        .optional(),
+    )
     .query(async ({ ctx, input }) => {
-      return getLeaderboard(ctx.prisma, ctx.user.id, input?.sortBy ?? 'day');
+      return getLeaderboard(
+        ctx.prisma,
+        ctx.user.id,
+        input?.window ?? 'today',
+        input?.sortBy ?? 'xp',
+      );
     }),
 });

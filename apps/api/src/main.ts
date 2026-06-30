@@ -13,7 +13,7 @@ import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './services/auth.service';
-import { TasksService } from './services/tasks.service';
+import { ActivitiesService } from './services/activities.service';
 import { appRouter } from './trpc/router';
 import { createContextFactory } from './trpc/context';
 
@@ -59,11 +59,11 @@ async function bootstrap() {
 
   const prisma = app.get(PrismaService);
   const authService = app.get(AuthService);
-  const tasksService = app.get(TasksService);
+  const activitiesService = app.get(ActivitiesService);
   const createContext = createContextFactory({
     prisma,
     authService,
-    tasksService,
+    activitiesService,
   });
 
   const fastify = app.getHttpAdapter().getInstance();

@@ -2,10 +2,17 @@ import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import { latestChallengeRelationArgs } from '../utils/challenge-query';
 import { isInterimDayCompleted } from '../utils/day-completion';
+import { getIsoWeekRange, getUserLocalDate } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 import { getMemberStatus } from '../utils/member-status';
 
-export type LeaderboardSortBy = 'day' | 'successRate' | 'streak' | 'name';
+export type LeaderboardWindow = 'today' | 'week' | 'total';
+export type LeaderboardSortBy =
+  | 'xp'
+  | 'streak'
+  | 'name'
+  | 'day'
+  | 'successRate';
 
 export type LeaderboardMember = {
   rank: number;
@@ -15,6 +22,7 @@ export type LeaderboardMember = {
   currentDay: number;
   status: 'ACTIVE' | 'COMPLETED';
   streak: number;
+  xp: number;
   successRate: number;
 };
 
@@ -32,6 +40,42 @@ function computeSuccessRate(
   return Math.round((completed / finalized.length) * 100);
 }
 
+async function aggregateWindowXp(
+  prisma: PrismaService,
+  challengeId: string,
+  timezone: string,
+  window: LeaderboardWindow,
+  totalXp: number,
+): Promise<number> {
+  if (window === 'total') {
+    const today = getUserLocalDate(timezone);
+    const todayScore = await prisma.dayScore.findFirst({
+      where: { challengeId, date: today },
+      select: { netXp: true },
+    });
+    return totalXp + (todayScore?.netXp ?? 0);
+  }
+
+  if (window === 'today') {
+    const today = getUserLocalDate(timezone);
+    const todayScore = await prisma.dayScore.findFirst({
+      where: { challengeId, date: today },
+      select: { netXp: true },
+    });
+    return todayScore?.netXp ?? 0;
+  }
+
+  const { start, end } = getIsoWeekRange(timezone);
+  const scores = await prisma.dayScore.findMany({
+    where: {
+      challengeId,
+      date: { gte: start, lte: end },
+    },
+    select: { netXp: true },
+  });
+  return scores.reduce((sum, score) => sum + score.netXp, 0);
+}
+
 function sortMembers(
   members: Omit<LeaderboardMember, 'rank'>[],
   sortBy: LeaderboardSortBy,
@@ -40,21 +84,20 @@ function sortMembers(
 
   switch (sortBy) {
     case 'successRate':
-      sorted.sort(
-        (a, b) => b.successRate - a.successRate || b.currentDay - a.currentDay,
-      );
+      sorted.sort((a, b) => b.successRate - a.successRate || b.xp - a.xp);
       break;
     case 'streak':
-      sorted.sort((a, b) => b.streak - a.streak || b.currentDay - a.currentDay);
+      sorted.sort((a, b) => b.streak - a.streak || b.xp - a.xp);
       break;
     case 'name':
       sorted.sort((a, b) => a.name.localeCompare(b.name));
       break;
     case 'day':
+      sorted.sort((a, b) => b.currentDay - a.currentDay || b.xp - a.xp);
+      break;
+    case 'xp':
     default:
-      sorted.sort(
-        (a, b) => b.currentDay - a.currentDay || b.successRate - a.successRate,
-      );
+      sorted.sort((a, b) => b.xp - a.xp || b.streak - a.streak);
       break;
   }
 
@@ -64,7 +107,8 @@ function sortMembers(
 export async function getLeaderboard(
   prisma: PrismaService,
   userId: string,
-  sortBy: LeaderboardSortBy = 'day',
+  window: LeaderboardWindow = 'today',
+  sortBy: LeaderboardSortBy = 'xp',
 ): Promise<LeaderboardResult> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -108,6 +152,15 @@ export async function getLeaderboard(
       const successRate = challenge
         ? computeSuccessRate(challenge.dayScores)
         : 0;
+      const xp = challenge
+        ? await aggregateWindowXp(
+            prisma,
+            challenge.id,
+            member.timezone,
+            window,
+            challenge.totalXp,
+          )
+        : 0;
 
       return {
         id: member.id,
@@ -116,6 +169,7 @@ export async function getLeaderboard(
         currentDay,
         status: getMemberStatus(challenge),
         streak,
+        xp,
         successRate,
       };
     }),

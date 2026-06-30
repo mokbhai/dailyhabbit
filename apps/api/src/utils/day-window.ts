@@ -123,3 +123,23 @@ export function addLocalDays(date: Date, days: number, timezone: string): Date {
 export function isSameLocalDay(a: Date, b: Date, timezone: string): boolean {
   return formatDateKey(a, timezone) === formatDateKey(b, timezone);
 }
+
+/** Returns local-midnight instants for Monday and Sunday of the current ISO week. */
+export function getIsoWeekRange(
+  timezone: string,
+  now = new Date(),
+): { start: Date; end: Date } {
+  const dateKey = formatDateKey(now, timezone);
+  const { year, month, day } = parseDateKey(dateKey);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = utcDate.getUTCDay();
+  const isoDay = dayOfWeek === 0 ? 7 : dayOfWeek;
+  const mondayKey = addDaysToDateKey(dateKey, -(isoDay - 1));
+  const sundayKey = addDaysToDateKey(mondayKey, 6);
+  const mondayParts = parseDateKey(mondayKey);
+  const sundayParts = parseDateKey(sundayKey);
+  return {
+    start: zonedTimeToUtc(mondayParts, timezone),
+    end: zonedTimeToUtc(sundayParts, timezone),
+  };
+}

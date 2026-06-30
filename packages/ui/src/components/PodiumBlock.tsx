@@ -60,7 +60,8 @@ function PodiumSlot({
         <span className="text-2xl">{style.medal}</span>
         <p className={cn('text-sm font-medium', style.color)}>{member.name}</p>
         <p className="text-xs text-[var(--text-muted)]">
-          Day {member.currentDay} · {member.successRate}%
+          Day {member.currentDay}
+          {member.xp != null ? ` · ${member.xp} XP` : ''}
         </p>
       </div>
       <div
