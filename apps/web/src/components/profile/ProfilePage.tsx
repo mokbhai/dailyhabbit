@@ -17,7 +17,7 @@ function ProfileContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [reminderTime, setReminderTime] = useState('');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
@@ -53,14 +53,9 @@ function ProfileContent() {
       setPhone(phoneToLocalInput(profile.data.phone));
       setEmail(profile.data.email ?? '');
       setReminderTime(profile.data.reminderTime ?? '');
+      setWhatsappOptIn(profile.data.whatsappOptIn);
     }
   }, [profile.data]);
-
-  useEffect(() => {
-    if ('Notification' in window) {
-      setNotificationsEnabled(Notification.permission === 'granted');
-    }
-  }, []);
 
   const needsPhoneMigration = Boolean(
     profile.data?.email && !profile.data?.phone,
@@ -75,10 +70,17 @@ function ProfileContent() {
     });
   }, [needsPhoneMigration]);
 
-  async function requestNotifications() {
-    if (!('Notification' in window)) return;
-    const permission = await Notification.requestPermission();
-    setNotificationsEnabled(permission === 'granted');
+  function handleWhatsappOptInChange(enabled: boolean) {
+    setWhatsappOptIn(enabled);
+    setMessage(null);
+    updateProfile.mutate(
+      { whatsappOptIn: enabled },
+      {
+        onError: () => {
+          setWhatsappOptIn(!enabled);
+        },
+      },
+    );
   }
 
   function handleExport() {
@@ -254,7 +256,7 @@ function ProfileContent() {
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
-            Daily reminder time
+            Morning reminder time
           </label>
           <input
             type="time"
@@ -262,23 +264,38 @@ function ProfileContent() {
             onChange={(e) => setReminderTime(e.target.value)}
             className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
           />
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Used for WhatsApp morning reminders in your timezone.
+          </p>
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[var(--text-muted)]">
-            Browser notifications
-          </span>
-          {notificationsEnabled ? (
-            <span className="text-xs text-[var(--success)]">Enabled</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void requestNotifications()}
-              className="text-xs uppercase tracking-wider text-[var(--accent-red)]"
-            >
-              Enable
-            </button>
-          )}
+          <div>
+            <span className="text-sm text-[var(--text-primary)]">
+              WhatsApp reminders
+            </span>
+            <p className="text-xs text-[var(--text-muted)]">
+              Morning and evening nudges via WhatsApp
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={whatsappOptIn}
+            onClick={() => handleWhatsappOptInChange(!whatsappOptIn)}
+            disabled={updateProfile.isPending}
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition disabled:opacity-50 ${
+              whatsappOptIn
+                ? 'border-[var(--accent-red)] bg-[var(--accent-red)]'
+                : 'border-[var(--border)] bg-[var(--surface-raised)]'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                whatsappOptIn ? 'left-6' : 'left-0.5'
+              }`}
+            />
+          </button>
         </div>
 
         {updateProfile.error && (

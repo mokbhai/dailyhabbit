@@ -12,6 +12,7 @@ export type ProfileData = {
   avatarUrl: string | null;
   timezone: string;
   reminderTime: string | null;
+  whatsappOptIn: boolean;
   groupId: string | null;
   groupName: string | null;
   isGroupAdmin: boolean;
@@ -38,6 +39,7 @@ export async function getProfile(
     avatarUrl: user.avatarUrl,
     timezone: user.timezone,
     reminderTime: user.reminderTime,
+    whatsappOptIn: user.whatsappOptIn,
     groupId: user.groupId,
     groupName: user.group?.name ?? null,
     isGroupAdmin: user.group?.adminUserId === userId,
@@ -48,6 +50,7 @@ export type UpdateProfileInput = {
   name?: string;
   password?: string;
   reminderTime?: string | null;
+  whatsappOptIn?: boolean;
   phone?: string;
   email?: string;
 };
@@ -62,6 +65,7 @@ export async function updateProfile(
     name?: string;
     passwordHash?: string;
     reminderTime?: string | null;
+    whatsappOptIn?: boolean;
     phone?: string;
     email?: string;
   } = {};
@@ -97,6 +101,10 @@ export async function updateProfile(
       });
     }
     data.reminderTime = input.reminderTime;
+  }
+
+  if (input.whatsappOptIn !== undefined) {
+    data.whatsappOptIn = input.whatsappOptIn;
   }
 
   if (input.phone !== undefined) {
@@ -160,6 +168,7 @@ export async function updateProfile(
       avatarUrl: true,
       timezone: true,
       reminderTime: true,
+      whatsappOptIn: true,
       groupId: true,
     },
   });

@@ -18,6 +18,7 @@ type StoredUser = {
   avatarUrl: string | null;
   groupId: string | null;
   reminderTime: string | null;
+  whatsappOptIn: boolean;
 };
 
 function createProfileContext(stores: {
@@ -112,6 +113,7 @@ function legacyUserStore(): {
     avatarUrl: null,
     groupId: null,
     reminderTime: null,
+    whatsappOptIn: true,
   };
 
   return {
@@ -156,6 +158,7 @@ describe('profileRouter update phone', () => {
       avatarUrl: null,
       groupId: null,
       reminderTime: null,
+      whatsappOptIn: true,
     };
     stores.users.set(OTHER_ID, other);
     stores.usersByPhone.set(OTHER_PHONE, other);
@@ -166,5 +169,25 @@ describe('profileRouter update phone', () => {
       code: 'CONFLICT',
       message: 'Account already exists',
     } satisfies Partial<TRPCError>);
+  });
+});
+
+describe('profileRouter whatsappOptIn', () => {
+  it('round-trips whatsappOptIn through get and update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const initial = await caller.get();
+    expect(initial.whatsappOptIn).toBe(true);
+
+    const updated = await caller.update({ whatsappOptIn: false });
+    expect(updated.whatsappOptIn).toBe(false);
+    expect(stores.users.get(USER_ID)?.whatsappOptIn).toBe(false);
+
+    const afterUpdate = await caller.get();
+    expect(afterUpdate.whatsappOptIn).toBe(false);
+
+    await caller.update({ whatsappOptIn: true });
+    expect((await caller.get()).whatsappOptIn).toBe(true);
   });
 });
