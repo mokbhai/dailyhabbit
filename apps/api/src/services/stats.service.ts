@@ -1,23 +1,22 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
-import {
-  isInterimDayCompleted,
-  isInterimDayFailed,
-} from '../utils/day-completion';
+import { isInterimDayCompleted } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 
 export type DashboardStats = {
+  totalXp: number;
+  todayNetXp: number;
+  currentDay: number;
+  startDate: Date | null;
+  todayDate: Date;
+  estimatedFinishDate: Date | null;
   currentStreak: number;
   longestStreak: number;
   totalDaysCompleted: number;
   successRate: number;
   timesRestarted: number;
-  yesterdayFailed: boolean;
-  currentDay: number;
-  startDate: Date | null;
-  estimatedFinishDate: Date | null;
 };
 
 export async function getDashboardStats(
@@ -28,6 +27,8 @@ export async function getDashboardStats(
   if (!user) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
+
+  const todayDate = getUserLocalDate(user.timezone);
 
   const challenge = await prisma.challenge.findFirst({
     where: { userId },
@@ -49,24 +50,16 @@ export async function getDashboardStats(
       ? Math.round((totalDaysCompleted / totalDaysEvaluated) * 100)
       : 0;
 
-  const yesterdayDate = addLocalDays(
-    getUserLocalDate(user.timezone),
-    -1,
-    user.timezone,
-  );
-  const yesterdayScore = challenge
-    ? await prisma.dayScore.findFirst({
-        where: {
-          challengeId: challenge.id,
-          date: yesterdayDate,
-        },
-        select: { finalized: true, breakdown: true },
-      })
-    : null;
+  let todayNetXp = 0;
+  if (challenge) {
+    const todayScore = await prisma.dayScore.findFirst({
+      where: { challengeId: challenge.id, date: todayDate },
+      select: { netXp: true, finalized: true },
+    });
+    todayNetXp = todayScore?.netXp ?? 0;
+  }
 
-  const yesterdayFailed = yesterdayScore
-    ? isInterimDayFailed(yesterdayScore)
-    : false;
+  const totalXp = (challenge?.totalXp ?? 0) + todayNetXp;
 
   const currentStreak = challenge
     ? await getLiveStreak(prisma, {
@@ -77,22 +70,25 @@ export async function getDashboardStats(
         storedStreak: challenge.currentStreak,
       })
     : 0;
+
   const lengthDays = challenge?.lengthDays ?? 30;
   const daysRemaining = challenge
     ? Math.max(0, lengthDays - (challenge.currentDay - 1))
     : lengthDays;
   const estimatedFinishDate =
     challenge && daysRemaining > 0
-      ? addLocalDays(
-          getUserLocalDate(user.timezone),
-          daysRemaining,
-          user.timezone,
-        )
+      ? addLocalDays(todayDate, daysRemaining, user.timezone)
       : challenge && challenge.currentDay > lengthDays
-        ? getUserLocalDate(user.timezone)
+        ? todayDate
         : null;
 
   return {
+    totalXp,
+    todayNetXp,
+    currentDay: challenge?.currentDay ?? 1,
+    startDate: challenge?.startDate ?? null,
+    todayDate,
+    estimatedFinishDate,
     currentStreak,
     longestStreak: challenge
       ? Math.max(challenge.longestStreak, currentStreak)
@@ -100,9 +96,5 @@ export async function getDashboardStats(
     totalDaysCompleted,
     successRate,
     timesRestarted: 0,
-    yesterdayFailed,
-    currentDay: challenge?.currentDay ?? 1,
-    startDate: challenge?.startDate ?? null,
-    estimatedFinishDate,
   };
 }

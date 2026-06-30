@@ -6,12 +6,18 @@ export type LeaderboardMember = {
   name: string;
   avatarUrl: string | null;
   currentDay: number;
-  status: 'ACTIVE' | 'ELIMINATED' | 'COMPLETED';
+  status: 'ACTIVE' | 'COMPLETED';
   streak: number;
+  xp?: number;
   successRate: number;
 };
 
-export type LeaderboardSortBy = 'day' | 'successRate' | 'streak' | 'name';
+export type LeaderboardSortBy =
+  | 'day'
+  | 'successRate'
+  | 'streak'
+  | 'name'
+  | 'xp';
 
 export type LeaderboardTableProps = {
   members: LeaderboardMember[];
@@ -22,17 +28,12 @@ export type LeaderboardTableProps = {
 };
 
 const SORT_OPTIONS: { value: LeaderboardSortBy; label: string }[] = [
+  { value: 'xp', label: 'XP' },
   { value: 'day', label: 'Current Day' },
   { value: 'successRate', label: 'Success Rate' },
   { value: 'streak', label: 'Streak' },
   { value: 'name', label: 'Name' },
 ];
-
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: 'text-[var(--success)]',
-  ELIMINATED: 'text-[var(--accent-red)]',
-  COMPLETED: 'text-[var(--gold)]',
-};
 
 export function LeaderboardTable({
   members,
@@ -80,10 +81,10 @@ export function LeaderboardTable({
                 Streak
               </th>
               <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-[var(--text-muted)]">
-                Success
+                XP
               </th>
               <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-[var(--text-muted)]">
-                Status
+                Success
               </th>
             </tr>
           </thead>
@@ -129,16 +130,14 @@ export function LeaderboardTable({
                 <td className="px-4 py-3 text-right text-[var(--text-primary)]">
                   {member.streak}
                 </td>
+                <td
+                  className="px-4 py-3 text-right text-[var(--text-primary)]"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  {member.xp ?? 0}
+                </td>
                 <td className="px-4 py-3 text-right text-[var(--text-primary)]">
                   {member.successRate}%
-                </td>
-                <td
-                  className={cn(
-                    'px-4 py-3 text-right text-xs uppercase tracking-wider',
-                    STATUS_COLORS[member.status],
-                  )}
-                >
-                  {member.status}
                 </td>
               </tr>
             ))}

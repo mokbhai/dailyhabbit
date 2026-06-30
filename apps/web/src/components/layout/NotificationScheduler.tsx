@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import type { TaskStatus } from '@workspace-starter/ui';
 import { getToken } from '../../lib/auth';
 import {
   hasNotificationPermission,
@@ -11,13 +10,30 @@ import {
 } from '../../lib/notifications';
 import { trpc } from '../../lib/trpc';
 
-const INCOMPLETE_STATUSES = new Set<TaskStatus>([
-  'PENDING',
-  'OVERDUE',
-  'REJECTED',
-]);
-
 const POLL_INTERVAL_MS = 60_000;
+
+function isActivityIncomplete(
+  log: {
+    state: string | null;
+    tier: string | null;
+    value: number | null;
+    subPoints: Record<string, string> | null;
+  } | null,
+): boolean {
+  if (!log) {
+    return true;
+  }
+  if (log.state != null && log.state !== 'UNLOGGED') {
+    return false;
+  }
+  if (log.tier != null || log.value != null) {
+    return false;
+  }
+  if (log.subPoints != null && Object.keys(log.subPoints).length > 0) {
+    return false;
+  }
+  return true;
+}
 
 export function NotificationScheduler() {
   const hasToken = Boolean(getToken());
@@ -25,7 +41,7 @@ export function NotificationScheduler() {
   const profileQuery = trpc.profile.get.useQuery(undefined, {
     enabled: hasToken,
   });
-  const tasksQuery = trpc.tasks.getToday.useQuery(undefined, {
+  const activitiesQuery = trpc.activities.getToday.useQuery(undefined, {
     enabled: hasToken,
   });
 
@@ -36,9 +52,9 @@ export function NotificationScheduler() {
       if (!hasNotificationPermission()) return;
 
       const now = new Date();
-      const [profileResult, tasksResult] = await Promise.all([
+      const [profileResult, activitiesResult] = await Promise.all([
         profileQuery.refetch(),
-        tasksQuery.refetch(),
+        activitiesQuery.refetch(),
       ]);
 
       const reminderTime = profileResult.data?.reminderTime;
@@ -49,14 +65,14 @@ export function NotificationScheduler() {
       ) {
         showNotification(
           'DRCODE 75 Hard',
-          'Time for your daily check-in. Log your tasks before midnight.',
+          'Time for your daily check-in. Log your activities before midnight.',
         );
         markFiredToday('reminder');
       }
 
-      const tasks = tasksResult.data?.tasks ?? [];
-      const hasIncomplete = tasks.some((task) =>
-        INCOMPLETE_STATUSES.has(task.status),
+      const activities = activitiesResult.data?.scoredActivities ?? [];
+      const hasIncomplete = activities.some((activity) =>
+        isActivityIncomplete(activity.log),
       );
 
       if (
@@ -66,7 +82,7 @@ export function NotificationScheduler() {
       ) {
         showNotification(
           'DRCODE 75 Hard',
-          'Incomplete tasks remain for today. Submit proof before midnight.',
+          'Incomplete activities remain for today. Log them before midnight.',
         );
         markFiredToday('warning');
       }
@@ -75,7 +91,7 @@ export function NotificationScheduler() {
     void tick();
     const intervalId = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [hasToken, profileQuery, tasksQuery]);
+  }, [hasToken, profileQuery, activitiesQuery]);
 
   return null;
 }

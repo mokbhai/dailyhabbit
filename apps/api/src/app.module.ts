@@ -4,7 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import path from 'node:path';
 import { DayEvaluatorService } from './cron/day-evaluator.service';
 import { AuthModule } from './modules/auth.module';
-import { TasksModule } from './modules/tasks.module';
+import { ActivitiesModule } from './modules/activities.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -18,7 +18,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
-    TasksModule,
+    ActivitiesModule,
   ],
   providers: [DayEvaluatorService],
 })

@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  mapActivityToScored,
+  mapLogToInput,
+} from '../services/activities.service';
+import { computeDayScore } from '../services/scoring.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { computeDayLoggingStatus } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
@@ -54,10 +59,18 @@ export class DayEvaluatorService {
       return;
     }
 
-    const scoredActivities = await this.prisma.activity.findMany({
-      where: { groupId, active: true, scored: true },
-      select: { id: true },
+    const activities = await this.prisma.activity.findMany({
+      where: {
+        OR: [
+          { groupId, active: true, scored: true },
+          { ownerUserId: userId, isPersonal: true, active: true },
+        ],
+      },
     });
+
+    const scoredActivities = activities.filter(
+      (a) => a.scored && !a.isPersonal,
+    );
 
     if (scoredActivities.length === 0) {
       return;
@@ -102,7 +115,15 @@ export class DayEvaluatorService {
       })),
     );
 
-    const netXp = activityLogs.reduce((sum, log) => sum + log.xpAwarded, 0);
+    const logsById = Object.fromEntries(
+      activityLogs.map((log) => [log.activityId, mapLogToInput(log)]),
+    );
+
+    const score = computeDayScore(
+      activities.map(mapActivityToScored),
+      logsById,
+      { applyGrace: true },
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.dayScore.upsert({
@@ -117,17 +138,19 @@ export class DayEvaluatorService {
           userId,
           date: previousDay,
           dayNumber: challenge.currentDay,
-          netXp,
-          xpEarned: Math.max(0, netXp),
-          xpDeducted: Math.max(0, -netXp),
-          breakdown: { allScoredLogged },
+          netXp: score.netXp,
+          xpEarned: score.xpEarned,
+          xpDeducted: score.xpDeducted,
+          personalXp: score.personalXp,
+          breakdown: { allScoredLogged, entries: score.breakdown },
           finalized: true,
         },
         update: {
-          netXp,
-          xpEarned: Math.max(0, netXp),
-          xpDeducted: Math.max(0, -netXp),
-          breakdown: { allScoredLogged },
+          netXp: score.netXp,
+          xpEarned: score.xpEarned,
+          xpDeducted: score.xpDeducted,
+          personalXp: score.personalXp,
+          breakdown: { allScoredLogged, entries: score.breakdown },
           finalized: true,
         },
       });
@@ -143,7 +166,7 @@ export class DayEvaluatorService {
           currentDay: completed ? challenge.lengthDays + 1 : newDay,
           currentStreak: newStreak,
           longestStreak: newLongestStreak,
-          totalXp: { increment: netXp },
+          totalXp: { increment: score.netXp },
           ...(completed ? { isActive: false, endDate: new Date() } : {}),
         },
       });

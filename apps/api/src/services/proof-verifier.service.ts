@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import type { LegacyTaskType } from './tasks.service';
+import type { LegacyTaskType } from './activities.service';
 
 export type VerificationResult = {
   passed: boolean;

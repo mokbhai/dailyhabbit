@@ -4,7 +4,7 @@ import {
   isInterimDayCompleted,
   isInterimDayFailed,
 } from '../utils/day-completion';
-import type { LegacyTaskType } from './tasks.service';
+import type { LegacyTaskType } from './activities.service';
 
 export type HistoryFilters = {
   taskType?: LegacyTaskType;

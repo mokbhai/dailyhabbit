@@ -15,7 +15,7 @@ function createTestContext(overrides: Partial<Context> = {}): Context {
       verifyToken: () => null,
       detectTimezone: () => 'UTC',
     } as Context['authService'],
-    tasksService: {} as Context['tasksService'],
+    activitiesService: {} as Context['activitiesService'],
     ...overrides,
   };
 }
@@ -24,7 +24,8 @@ describe('appRouter', () => {
   it('exposes DRCODE routers', () => {
     expect(appRouter._def.procedures).toHaveProperty('auth.register');
     expect(appRouter._def.procedures).toHaveProperty('groups.create');
-    expect(appRouter._def.procedures).toHaveProperty('tasks.getToday');
+    expect(appRouter._def.procedures).toHaveProperty('activities.getToday');
+    expect(appRouter._def.procedures).toHaveProperty('activities.markActivity');
     expect(appRouter._def.procedures).toHaveProperty('leaderboard.get');
   });
 
