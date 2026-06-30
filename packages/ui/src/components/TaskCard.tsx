@@ -15,10 +15,14 @@ export type TaskCardProps = {
 };
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
-  PENDING: 'border-[var(--border)] text-[var(--text-muted)]',
-  COMPLETED: 'border-[var(--success)] text-[var(--success)]',
-  OVERDUE: 'border-[var(--accent-red)] text-[var(--accent-red)]',
-  REJECTED: 'border-[var(--accent-red)] text-[var(--accent-red)]',
+  PENDING:
+    'border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-muted)]',
+  COMPLETED:
+    'border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]',
+  OVERDUE:
+    'border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10 text-[var(--accent-red)]',
+  REJECTED:
+    'border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10 text-[var(--accent-red)]',
 };
 
 export function TaskCard({
@@ -56,7 +60,7 @@ export function TaskCard({
         </span>
         <span
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+            'inline-flex shrink-0 items-center whitespace-nowrap rounded-md border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide',
             STATUS_STYLES[status],
             badgeClassName,
           )}
@@ -64,7 +68,9 @@ export function TaskCard({
         >
           {status}
         </span>
-        <span className="text-[var(--text-muted)]">{expanded ? '−' : '+'}</span>
+        <span className="ml-1 shrink-0 text-[var(--text-muted)]">
+          {expanded ? '−' : '+'}
+        </span>
       </button>
 
       {expanded && children && (

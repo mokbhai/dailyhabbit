@@ -73,10 +73,14 @@ const TASK_DEFINITIONS: Array<{
   { taskType: TaskType.PROGRESS_PHOTO, title: 'Progress Photo', icon: '📸' },
 ];
 
-const PHOTO_TASKS = new Set<TaskType>([
+const OPTIONAL_PHOTO_TASKS = new Set<TaskType>([
   TaskType.OUTDOOR_WORKOUT,
   TaskType.INDOOR_WORKOUT,
   TaskType.WATER,
+]);
+
+const PHOTO_TASKS = new Set<TaskType>([
+  ...OPTIONAL_PHOTO_TASKS,
   TaskType.PROGRESS_PHOTO,
 ]);
 
@@ -125,7 +129,7 @@ function validateTaskInput(
     return { isValid: true };
   }
 
-  if (PHOTO_TASKS.has(taskType) && !input.proofUrl) {
+  if (taskType === TaskType.PROGRESS_PHOTO && !input.proofUrl) {
     return { isValid: false, reason: 'Photo proof is required' };
   }
 
@@ -445,6 +449,38 @@ export function isTaskLogValid(log: {
     log.isValid &&
     log.aiVerdict !== AiVerdict.FAILED
   );
+}
+
+export function areAllTasksCompleteForDay(
+  taskLogs: Array<{
+    taskType: TaskType;
+    isValid: boolean;
+    aiVerdict: AiVerdict | null;
+    completedAt: Date | null;
+  }>,
+): boolean {
+  const logsByType = new Map(taskLogs.map((log) => [log.taskType, log]));
+
+  return (
+    ALL_TASK_TYPES.every((type) => logsByType.has(type)) &&
+    ALL_TASK_TYPES.every((type) => isTaskLogValid(logsByType.get(type)!))
+  );
+}
+
+export function computeCurrentStreak(
+  currentDay: number,
+  todayTaskLogs: Array<{
+    taskType: TaskType;
+    isValid: boolean;
+    aiVerdict: AiVerdict | null;
+    completedAt: Date | null;
+  }>,
+): number {
+  if (areAllTasksCompleteForDay(todayTaskLogs)) {
+    return currentDay;
+  }
+
+  return Math.max(0, currentDay - 1);
 }
 
 export const ALL_TASK_TYPES = TASK_DEFINITIONS.map((task) => task.taskType);

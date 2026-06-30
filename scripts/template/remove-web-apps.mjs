@@ -6,13 +6,12 @@ import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 
-const WEB_APP_DIRECTORIES = ['apps/web', 'apps/secondary-web', 'apps/web-host'];
+const WEB_APP_DIRECTORIES = ['apps/web', 'apps/web-host'];
 
 const OBSOLETE_TEST_FILE = 'tests/root-start-scripts.test.mjs';
 
 const REMOVED_WORKSPACE_NAMES = [
   '@workspace-starter/web',
-  '@workspace-starter/secondary-web',
   '@workspace-starter/web-host',
 ];
 

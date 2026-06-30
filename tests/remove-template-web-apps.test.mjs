@@ -97,7 +97,7 @@ async function createFixture() {
     'export {};\n',
   );
 
-  for (const appName of ['api', 'web', 'secondary-web', 'web-host']) {
+  for (const appName of ['api', 'web', 'web-host']) {
     await mkdir(path.join(tempDir, 'apps', appName), { recursive: true });
     await writeJson(path.join(tempDir, 'apps', appName, 'package.json'), {
       name: `@workspace-starter/${appName}`,
@@ -120,14 +120,9 @@ test('removeTemplateWebApps removes bundled web apps and rewrites root scripts',
 
     const result = await removeTemplateWebApps({ repoDir: tempDir });
 
-    assert.deepEqual(result.removedDirectories, [
-      'apps/web',
-      'apps/secondary-web',
-      'apps/web-host',
-    ]);
+    assert.deepEqual(result.removedDirectories, ['apps/web', 'apps/web-host']);
     await access(path.join(tempDir, 'apps', 'api', 'package.json'));
     await assert.rejects(access(path.join(tempDir, 'apps', 'web')));
-    await assert.rejects(access(path.join(tempDir, 'apps', 'secondary-web')));
     await assert.rejects(access(path.join(tempDir, 'apps', 'web-host')));
 
     const rootPackage = JSON.parse(
@@ -190,11 +185,7 @@ test('removeTemplateWebApps dry run leaves files unchanged', async () => {
     });
 
     assert.equal(result.dryRun, true);
-    assert.deepEqual(result.removedDirectories, [
-      'apps/web',
-      'apps/secondary-web',
-      'apps/web-host',
-    ]);
+    assert.deepEqual(result.removedDirectories, ['apps/web', 'apps/web-host']);
     await access(path.join(tempDir, 'apps', 'web', 'package.json'));
 
     const rootPackage = JSON.parse(

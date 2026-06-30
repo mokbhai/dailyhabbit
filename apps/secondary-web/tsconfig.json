@@ -1,9 +1,0 @@
-{
-  "extends": "@workspace-starter/config-typescript/astro.json",
-  "compilerOptions": {
-    "declaration": false,
-    "declarationMap": false
-  },
-  "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist", "node_modules"]
-}

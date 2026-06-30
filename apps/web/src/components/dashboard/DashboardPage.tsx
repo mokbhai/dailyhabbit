@@ -33,10 +33,14 @@ type TaskType =
   | 'READING'
   | 'PROGRESS_PHOTO';
 
-const PHOTO_TASKS = new Set<TaskType>([
+const OPTIONAL_PHOTO_TASKS = new Set<TaskType>([
   'OUTDOOR_WORKOUT',
   'INDOOR_WORKOUT',
   'WATER',
+]);
+
+const PHOTO_TASKS = new Set<TaskType>([
+  ...OPTIONAL_PHOTO_TASKS,
   'PROGRESS_PHOTO',
 ]);
 
@@ -81,6 +85,11 @@ function TaskProofForm({
     const payload: Record<string, unknown> = {
       taskType: task.taskType,
     };
+
+    if (task.taskType === 'PROGRESS_PHOTO' && !proofUrl) {
+      setError('Photo proof is required');
+      return;
+    }
 
     if (PHOTO_TASKS.has(task.taskType)) {
       payload.proofUrl = proofUrl || undefined;
@@ -179,15 +188,36 @@ function TaskProofForm({
         </label>
       )}
 
-      {PHOTO_TASKS.has(task.taskType) && (
-        <ProofUploader
-          uploadUrl={uploadUrl}
-          authToken={getToken()}
-          value={proofUrl}
-          disabled={isLocked}
-          onUploaded={setProofUrl}
-          onError={setError}
-        />
+      {OPTIONAL_PHOTO_TASKS.has(task.taskType) && (
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Photo (optional)
+          </p>
+          <ProofUploader
+            uploadUrl={uploadUrl}
+            authToken={getToken()}
+            value={proofUrl}
+            disabled={isLocked}
+            onUploaded={setProofUrl}
+            onError={setError}
+          />
+        </div>
+      )}
+
+      {task.taskType === 'PROGRESS_PHOTO' && (
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Photo (required)
+          </p>
+          <ProofUploader
+            uploadUrl={uploadUrl}
+            authToken={getToken()}
+            value={proofUrl}
+            disabled={isLocked}
+            onUploaded={setProofUrl}
+            onError={setError}
+          />
+        </div>
       )}
 
       {task.taskType === 'DIET' && (

@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
+import { computeCurrentStreak } from './tasks.service';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 
 export type DashboardStats = {
@@ -57,7 +58,24 @@ export async function getDashboardStats(
 
   const yesterdayFailed = yesterdayResult?.completed === false;
 
-  const currentStreak = attempt ? Math.max(0, attempt.currentDay - 1) : 0;
+  let currentStreak = 0;
+  if (attempt) {
+    const todayDate = getUserLocalDate(user.timezone);
+    const todayLogs = await prisma.taskLog.findMany({
+      where: {
+        attemptId: attempt.id,
+        userId,
+        date: todayDate,
+      },
+      select: {
+        taskType: true,
+        isValid: true,
+        aiVerdict: true,
+        completedAt: true,
+      },
+    });
+    currentStreak = computeCurrentStreak(attempt.currentDay, todayLogs);
+  }
   const daysRemaining = attempt
     ? Math.max(0, 75 - (attempt.currentDay - 1))
     : 75;
@@ -74,7 +92,9 @@ export async function getDashboardStats(
 
   return {
     currentStreak,
-    longestStreak: attempt?.longestStreak ?? 0,
+    longestStreak: attempt
+      ? Math.max(attempt.longestStreak, currentStreak)
+      : 0,
     totalDaysCompleted,
     successRate,
     timesRestarted: attempt?.timesRestarted ?? 0,
