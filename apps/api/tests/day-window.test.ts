@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { isLocalTimeMatch } from '../src/utils/day-window';
+import { isLocalTimeMatch, isValidTimeZone } from '../src/utils/day-window';
+
+describe('isValidTimeZone', () => {
+  it('returns true for known IANA zones', () => {
+    expect(isValidTimeZone('America/New_York')).toBe(true);
+    expect(isValidTimeZone('UTC')).toBe(true);
+    expect(isValidTimeZone('Asia/Kolkata')).toBe(true);
+  });
+
+  it('returns false for invalid zones', () => {
+    expect(isValidTimeZone('Not/AZone')).toBe(false);
+    expect(isValidTimeZone('')).toBe(false);
+  });
+});
 
 describe('isLocalTimeMatch', () => {
   it('matches when local hour:minute equals target in UTC', () => {

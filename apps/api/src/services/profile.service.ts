@@ -3,6 +3,7 @@ import { normalizePhone, PhoneValidationError } from '../auth/phone';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
+import { isValidTimeZone } from '../utils/day-window';
 
 export type ProfileData = {
   id: string;
@@ -53,6 +54,7 @@ export type UpdateProfileInput = {
   whatsappOptIn?: boolean;
   phone?: string;
   email?: string;
+  timezone?: string;
 };
 
 export async function updateProfile(
@@ -68,6 +70,7 @@ export async function updateProfile(
     whatsappOptIn?: boolean;
     phone?: string;
     email?: string;
+    timezone?: string;
   } = {};
 
   if (input.name !== undefined) {
@@ -148,6 +151,16 @@ export async function updateProfile(
     }
 
     data.email = input.email;
+  }
+
+  if (input.timezone !== undefined) {
+    if (!isValidTimeZone(input.timezone)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Invalid timezone',
+      });
+    }
+    data.timezone = input.timezone;
   }
 
   if (Object.keys(data).length === 0) {

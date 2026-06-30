@@ -20,6 +20,7 @@ export const profileRouter = router({
         whatsappOptIn: z.boolean().optional(),
         phone: z.string().min(1).optional(),
         email: z.string().email().optional(),
+        timezone: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
