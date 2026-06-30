@@ -13,7 +13,7 @@ export function QueryErrorState({
 }: QueryErrorStateProps) {
   return (
     <div className={className ?? 'text-center'}>
-      <p className="text-sm text-[var(--accent-red)]">
+      <p role="alert" className="text-sm text-[var(--accent-red)]">
         {message ?? DEFAULT_MESSAGE}
       </p>
       {onRetry && (

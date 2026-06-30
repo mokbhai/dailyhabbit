@@ -39,6 +39,54 @@ describe('ProofUploader', () => {
     expect(onError).toHaveBeenCalledWith('File too large');
   });
 
+  it('clears a prior inline error on a successful retry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          json: async () => ({ error: 'File too large' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ url: '/uploads/ok.jpg' }),
+        }),
+    );
+    const onUploaded = vi.fn();
+
+    render(
+      <ProofUploader
+        uploadUrl="http://localhost:3001/api/uploads"
+        authToken="test-token"
+        onUploaded={onUploaded}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    // First (failing) attempt.
+    await userEvent.upload(
+      input,
+      new File(['image'], 'proof.jpg', { type: 'image/jpeg' }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText('File too large')).toBeInTheDocument();
+    });
+
+    // Second attempt with a different file so the input fires onChange again.
+    await userEvent.upload(
+      input,
+      new File(['image2'], 'proof2.jpg', { type: 'image/jpeg' }),
+    );
+    await waitFor(() => {
+      expect(onUploaded).toHaveBeenCalledWith('/uploads/ok.jpg');
+    });
+    expect(screen.queryByText('File too large')).not.toBeInTheDocument();
+  });
+
   it('shows inline error when not authenticated', async () => {
     const onError = vi.fn();
 

@@ -115,7 +115,11 @@ export function ProofUploader({
             : 'Upload photo proof'}
       </button>
 
-      {error && <p className="text-sm text-[var(--accent-red)]">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-[var(--accent-red)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
