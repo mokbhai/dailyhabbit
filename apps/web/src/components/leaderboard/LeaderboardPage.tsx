@@ -9,12 +9,21 @@ import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
+type LeaderboardWindow = 'today' | 'week' | 'total';
+
+const WINDOW_OPTIONS: { value: LeaderboardWindow; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This week' },
+  { value: 'total', label: 'Total' },
+];
+
 function LeaderboardContent() {
   const [sortBy, setSortBy] = useState<LeaderboardSortBy>('xp');
+  const [window, setWindow] = useState<LeaderboardWindow>('today');
   const me = trpc.auth.me.useQuery();
 
   const leaderboard = trpc.leaderboard.get.useQuery(
-    { window: 'total', sortBy },
+    { window, sortBy },
     { refetchInterval: 60_000 },
   );
 
@@ -57,6 +66,30 @@ function LeaderboardContent() {
           Squad rankings · refreshes every 60s
         </p>
       </header>
+
+      <div
+        className="flex gap-2"
+        role="tablist"
+        aria-label="Leaderboard time window"
+      >
+        {WINDOW_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="tab"
+            aria-selected={window === option.value}
+            onClick={() => setWindow(option.value)}
+            className={
+              window === option.value
+                ? 'rounded-full border border-[var(--accent-red)] bg-[var(--accent-red)]/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--accent-red)]'
+                : 'rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] transition hover:border-[var(--accent-red)]/50 hover:text-[var(--text-primary)]'
+            }
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
 
       {data.podium.length > 0 && <PodiumBlock podium={data.podium} />}
 

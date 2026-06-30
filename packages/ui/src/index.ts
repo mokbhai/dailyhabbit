@@ -34,6 +34,22 @@ export { StreakBadge } from './components/StreakBadge';
 export type { StreakBadgeProps } from './components/StreakBadge';
 
 export { TaskCard } from './components/TaskCard';
-export type { TaskCardProps, TaskStatus } from './components/TaskCard';
+export type {
+  ActivityKind,
+  ActivityLogView,
+  SubPointConfig,
+  SubPointState,
+  TaskCardProps,
+  TaskStatus,
+} from './components/TaskCard';
+
+export { TierChips } from './components/TierChips';
+export type { TierChipsProps, TierOption } from './components/TierChips';
+
+export { NumberStepper, computeXpPreview } from './components/NumberStepper';
+export type { NumberStepperProps } from './components/NumberStepper';
+
+export { XpTotalBar } from './components/XpTotalBar';
+export type { XpTotalBarProps } from './components/XpTotalBar';
 
 export { cn } from './utils/cn';

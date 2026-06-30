@@ -1,11 +1,11 @@
 import { cn } from '../utils/cn';
 
 export type StatsRowProps = {
+  totalXp: number;
+  todayNetXp: number;
   currentStreak: number;
   longestStreak: number;
-  totalDaysCompleted: number;
   successRate: number;
-  timesRestarted: number;
   className?: string;
   itemClassName?: string;
   labelClassName?: string;
@@ -13,30 +13,30 @@ export type StatsRowProps = {
 };
 
 const STAT_ITEMS = [
+  { key: 'totalXp', label: 'Total XP' },
+  { key: 'todayNetXp', label: "Today's XP" },
   { key: 'currentStreak', label: 'Current Streak' },
   { key: 'longestStreak', label: 'Longest Streak' },
-  { key: 'totalDaysCompleted', label: 'Days Completed' },
   { key: 'successRate', label: 'Success Rate' },
-  { key: 'timesRestarted', label: 'Times Restarted' },
 ] as const;
 
 export function StatsRow({
+  totalXp,
+  todayNetXp,
   currentStreak,
   longestStreak,
-  totalDaysCompleted,
   successRate,
-  timesRestarted,
   className,
   itemClassName,
   labelClassName,
   valueClassName,
 }: StatsRowProps) {
   const values: Record<(typeof STAT_ITEMS)[number]['key'], string | number> = {
+    totalXp,
+    todayNetXp,
     currentStreak,
     longestStreak,
-    totalDaysCompleted,
     successRate: `${successRate}%`,
-    timesRestarted,
   };
 
   return (
