@@ -2,62 +2,251 @@ import { useState } from 'react';
 import {
   DayCounter,
   HeatmapGrid,
+  ProofUploader,
   StatsRow,
   StreakBadge,
   TaskCard,
-  type TaskStatus,
+  XpTotalBar,
+  type SubPointState,
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { getToken } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
+import {
+  applyMutationResult,
+  optimisticMarkDone,
+  optimisticNumberLog,
+  optimisticProofAttached,
+  optimisticSubPoints,
+  optimisticTierSelect,
+  optimisticUndo,
+  type GetTodayCache,
+  type TodayActivity,
+} from '../../lib/today-optimistic';
 
-const RULES = [
-  'Follow a diet — no cheat meals, no alcohol.',
-  'Two 45-minute workouts per day — one must be outdoors.',
-  'Drink 1 gallon (3.8L) of water daily.',
-  'Read 10 pages of a non-fiction book.',
-  'Take a progress photo every day.',
-];
+const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
-function activityStatus(
-  log: {
-    state: string | null;
-    tier: string | null;
-    value: number | null;
-    subPoints: Record<string, string> | null;
-  } | null,
-  canEdit: boolean,
-): TaskStatus {
-  if (!log || log.state === 'UNLOGGED' || log.state === null) {
-    const logged =
-      log?.tier != null ||
-      log?.value != null ||
-      (log?.subPoints != null && Object.keys(log.subPoints).length > 0);
-    if (!logged) {
-      return canEdit ? 'PENDING' : 'OVERDUE';
-    }
+function useTodayMutations() {
+  const utils = trpc.useUtils();
+
+  function settle() {
+    void utils.activities.getToday.invalidate();
+    void utils.stats.getDashboard.invalidate();
   }
-  if (log?.state === 'FAILED') {
-    return 'REJECTED';
+
+  function createHandlers<TInput extends { activityId: string }>(
+    optimisticPatch: (data: GetTodayCache, input: TInput) => GetTodayCache,
+  ) {
+    return {
+      async onMutate(input: TInput) {
+        await utils.activities.getToday.cancel();
+        const previous = utils.activities.getToday.getData();
+        utils.activities.getToday.setData(undefined, (old) =>
+          old ? optimisticPatch(old, input) : old,
+        );
+        return { previous };
+      },
+      onSuccess(
+        data: Parameters<typeof applyMutationResult>[2],
+        input: TInput,
+      ) {
+        utils.activities.getToday.setData(undefined, (old) =>
+          old ? applyMutationResult(old, input.activityId, data) : old,
+        );
+      },
+      onError(
+        _err: unknown,
+        _input: TInput,
+        context: { previous?: GetTodayCache } | undefined,
+      ) {
+        if (context?.previous) {
+          utils.activities.getToday.setData(undefined, context.previous);
+        }
+      },
+      onSettled: settle,
+    };
   }
-  return 'COMPLETED';
+
+  const markActivity = trpc.activities.markActivity.useMutation(
+    createHandlers((data, { activityId }) =>
+      optimisticMarkDone(data, activityId),
+    ),
+  );
+
+  const undoActivity = trpc.activities.undoActivity.useMutation(
+    createHandlers((data, { activityId }) => optimisticUndo(data, activityId)),
+  );
+
+  const logNumber = trpc.activities.logNumber.useMutation(
+    createHandlers((data, { activityId, value }) =>
+      optimisticNumberLog(data, activityId, value),
+    ),
+  );
+
+  const setTier = trpc.activities.setTier.useMutation(
+    createHandlers((data, { activityId, tier }) =>
+      optimisticTierSelect(data, activityId, tier),
+    ),
+  );
+
+  const setSubPoints = trpc.activities.setSubPoints.useMutation(
+    createHandlers((data, { activityId, states }) =>
+      optimisticSubPoints(
+        data,
+        activityId,
+        states as Record<string, SubPointState>,
+      ),
+    ),
+  );
+
+  const attachProof = trpc.activities.attachProof.useMutation({
+    async onMutate(input) {
+      await utils.activities.getToday.cancel();
+      const previous = utils.activities.getToday.getData();
+      utils.activities.getToday.setData(undefined, (old) =>
+        old
+          ? optimisticProofAttached(old, input.activityId, input.proofUrl)
+          : old,
+      );
+      return { previous };
+    },
+    onError(
+      _err: unknown,
+      _input: { activityId: string; proofUrl: string },
+      context: { previous?: GetTodayCache } | undefined,
+    ) {
+      if (context?.previous) {
+        utils.activities.getToday.setData(undefined, context.previous);
+      }
+    },
+    onSettled: settle,
+  });
+
+  const isPending =
+    markActivity.isPending ||
+    undoActivity.isPending ||
+    logNumber.isPending ||
+    setTier.isPending ||
+    setSubPoints.isPending ||
+    attachProof.isPending;
+
+  return {
+    markActivity,
+    undoActivity,
+    logNumber,
+    setTier,
+    setSubPoints,
+    attachProof,
+    isPending,
+  };
+}
+
+function ProofSection({
+  activity,
+  canEdit,
+  onAttach,
+}: {
+  activity: TodayActivity;
+  canEdit: boolean;
+  onAttach: (proofUrl: string) => void;
+}) {
+  if (!activity.canAttachProof) return null;
+
+  const hasProof = Boolean(activity.log?.proofUrl);
+  const aiPending = hasProof && activity.log?.aiVerdict == null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      <ProofUploader
+        uploadUrl={`${apiUrl}/api/uploads`}
+        apiBaseUrl={apiUrl}
+        authToken={getToken()}
+        value={activity.log?.proofUrl}
+        disabled={!canEdit}
+        onUploaded={onAttach}
+        buttonClassName="text-xs"
+      />
+      {aiPending && (
+        <p
+          className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          AI bonus pending
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ActivityCard({
+  activity,
+  canEdit,
+  mutations,
+  variant = 'scored',
+}: {
+  activity: TodayActivity;
+  canEdit: boolean;
+  mutations: ReturnType<typeof useTodayMutations>;
+  variant?: 'scored' | 'personal';
+}) {
+  const {
+    markActivity,
+    undoActivity,
+    logNumber,
+    setTier,
+    setSubPoints,
+    attachProof,
+    isPending,
+  } = mutations;
+
+  return (
+    <TaskCard
+      icon={activity.emoji ?? '✅'}
+      title={activity.title}
+      kind={activity.kind}
+      log={activity.log}
+      canEdit={canEdit}
+      xpComplete={activity.xpComplete}
+      unitLabel={activity.unitLabel}
+      xpPerUnit={activity.xpPerUnit}
+      xpCap={activity.xpCap}
+      subPoints={activity.subPoints}
+      tiers={activity.tiers}
+      disabled={isPending}
+      className={variant === 'personal' ? 'border-dashed' : undefined}
+      onMarkDone={() => markActivity.mutate({ activityId: activity.id })}
+      onUndo={() => undoActivity.mutate({ activityId: activity.id })}
+      onNumberCommit={(value) =>
+        logNumber.mutate({ activityId: activity.id, value })
+      }
+      onTierSelect={(tier) => setTier.mutate({ activityId: activity.id, tier })}
+      onSubPointChange={(states) =>
+        setSubPoints.mutate({ activityId: activity.id, states })
+      }
+      expandedContent={
+        activity.canAttachProof ? (
+          <ProofSection
+            activity={activity}
+            canEdit={canEdit}
+            onAttach={(proofUrl) =>
+              attachProof.mutate({ activityId: activity.id, proofUrl })
+            }
+          />
+        ) : undefined
+      }
+    />
+  );
 }
 
 function DashboardContent() {
   const [rulesOpen, setRulesOpen] = useState(false);
-  const utils = trpc.useUtils();
+  const mutations = useTodayMutations();
 
   const activitiesQuery = trpc.activities.getToday.useQuery();
   const statsQuery = trpc.stats.getDashboard.useQuery();
   const heatmapQuery = trpc.heatmap.get.useQuery();
-
-  const markActivity = trpc.activities.markActivity.useMutation({
-    onSuccess: () => {
-      void utils.activities.getToday.invalidate();
-      void utils.stats.getDashboard.invalidate();
-    },
-  });
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
     return (
@@ -75,6 +264,12 @@ function DashboardContent() {
   const stats = statsQuery.data;
   const today = activitiesQuery.data;
 
+  const activityTitles = today
+    ? [...today.scoredActivities, ...today.personalActivities].map(
+        (a) => a.title,
+      )
+    : [];
+
   return (
     <div className="min-h-screen bg-[var(--bg-black)] px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-8">
@@ -87,15 +282,18 @@ function DashboardContent() {
               DRCODE
             </p>
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
-              75 Hard Challenge
+              Discipline Challenge
             </p>
           </div>
-          {stats && <StreakBadge streak={stats.currentStreak} />}
+          {stats && (
+            <StreakBadge streak={stats.currentStreak} label="day streak" />
+          )}
         </header>
 
         {stats && (
           <DayCounter
             currentDay={stats.currentDay}
+            totalDays={stats.lengthDays}
             startDate={stats.startDate}
             estimatedFinishDate={stats.estimatedFinishDate}
           />
@@ -103,78 +301,49 @@ function DashboardContent() {
 
         {today && (
           <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2
-                className="text-lg uppercase tracking-wider text-[var(--text-muted)]"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                Today&apos;s Activities
-              </h2>
-              <p
-                className="text-sm text-[var(--text-primary)]"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                {today.dayTotals.netXp} XP
-              </p>
-            </div>
+            <h2
+              className="text-lg uppercase tracking-wider text-[var(--text-muted)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              Today&apos;s Activities
+            </h2>
+
+            <XpTotalBar
+              netXp={today.dayTotals.netXp}
+              personalXp={
+                today.personalActivities.length > 0
+                  ? today.dayTotals.personalXp
+                  : undefined
+              }
+            />
+
             {today.scoredActivities.map((activity) => (
-              <TaskCard
+              <ActivityCard
                 key={activity.id}
-                icon={activity.emoji ?? '✅'}
-                title={activity.title}
-                status={activityStatus(activity.log, today.canEdit)}
-              >
-                {today.canEdit &&
-                  activityStatus(activity.log, today.canEdit) !==
-                    'COMPLETED' && (
-                    <button
-                      type="button"
-                      disabled={markActivity.isPending}
-                      onClick={() =>
-                        markActivity.mutate({ activityId: activity.id })
-                      }
-                      className="w-full rounded bg-[var(--accent-red)] px-4 py-3 text-sm font-semibold uppercase tracking-wider text-white transition hover:opacity-90 disabled:opacity-50"
-                    >
-                      {markActivity.isPending ? 'Saving...' : 'Mark done'}
-                    </button>
-                  )}
-                {activity.log && activity.log.xpAwarded !== 0 && (
-                  <p className="text-xs text-[var(--success)]">
-                    {activity.log.xpAwarded > 0 ? '+' : ''}
-                    {activity.log.xpAwarded} XP
-                  </p>
-                )}
-              </TaskCard>
+                activity={activity}
+                canEdit={today.canEdit}
+                mutations={mutations}
+              />
             ))}
+
             {today.personalActivities.length > 0 && (
-              <>
-                <h3 className="pt-2 text-sm uppercase tracking-wider text-[var(--text-muted)]">
-                  Personal
+              <div className="mt-6 space-y-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-raised)]/50 p-4">
+                <h3
+                  className="text-sm uppercase tracking-wider text-[var(--text-muted)]"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  Personal · off leaderboard
                 </h3>
                 {today.personalActivities.map((activity) => (
-                  <TaskCard
+                  <ActivityCard
                     key={activity.id}
-                    icon={activity.emoji ?? '✅'}
-                    title={activity.title}
-                    status={activityStatus(activity.log, today.canEdit)}
-                  >
-                    {today.canEdit &&
-                      activityStatus(activity.log, today.canEdit) !==
-                        'COMPLETED' && (
-                        <button
-                          type="button"
-                          disabled={markActivity.isPending}
-                          onClick={() =>
-                            markActivity.mutate({ activityId: activity.id })
-                          }
-                          className="w-full rounded border border-[var(--border)] px-4 py-2 text-sm uppercase tracking-wider text-[var(--text-primary)] transition hover:border-[var(--accent-red)] disabled:opacity-50"
-                        >
-                          Mark done
-                        </button>
-                      )}
-                  </TaskCard>
+                    activity={activity}
+                    canEdit={today.canEdit}
+                    mutations={mutations}
+                    variant="personal"
+                  />
                 ))}
-              </>
+              </div>
             )}
           </section>
         )}
@@ -188,49 +357,51 @@ function DashboardContent() {
               Consistency
             </h2>
             <StatsRow
+              totalXp={stats.totalXp}
+              todayNetXp={stats.todayNetXp}
               currentStreak={stats.currentStreak}
               longestStreak={stats.longestStreak}
-              totalDaysCompleted={stats.totalDaysCompleted}
               successRate={stats.successRate}
-              timesRestarted={stats.timesRestarted}
             />
           </section>
         )}
 
-        {heatmapQuery.data && (
+        {heatmapQuery.data && stats && (
           <section>
             <h2
               className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              75-Day Progress
+              {stats.lengthDays}-Day Progress
             </h2>
             <HeatmapGrid cells={heatmapQuery.data.cells} />
           </section>
         )}
 
-        <section>
-          <button
-            type="button"
-            onClick={() => setRulesOpen((open) => !open)}
-            className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-sm uppercase tracking-wider text-[var(--text-primary)]"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            The 5 Rules
-            <span className="text-[var(--text-muted)]">
-              {rulesOpen ? '−' : '+'}
-            </span>
-          </button>
-          {rulesOpen && (
-            <ol className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-6 py-4 text-sm text-[var(--text-muted)]">
-              {RULES.map((rule) => (
-                <li key={rule} className="list-decimal">
-                  <span className="text-[var(--text-primary)]">{rule}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        {activityTitles.length > 0 && (
+          <section>
+            <button
+              type="button"
+              onClick={() => setRulesOpen((open) => !open)}
+              className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-sm uppercase tracking-wider text-[var(--text-primary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              Your Activities
+              <span className="text-[var(--text-muted)]">
+                {rulesOpen ? '−' : '+'}
+              </span>
+            </button>
+            {rulesOpen && (
+              <ol className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-6 py-4 text-sm text-[var(--text-muted)]">
+                {activityTitles.map((title) => (
+                  <li key={title} className="list-decimal">
+                    <span className="text-[var(--text-primary)]">{title}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
 
         <footer className="text-center">
           <a

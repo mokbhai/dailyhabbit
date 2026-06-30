@@ -9,6 +9,7 @@ export type DashboardStats = {
   totalXp: number;
   todayNetXp: number;
   currentDay: number;
+  lengthDays: number;
   startDate: Date | null;
   todayDate: Date;
   estimatedFinishDate: Date | null;
@@ -86,6 +87,7 @@ export async function getDashboardStats(
     totalXp,
     todayNetXp,
     currentDay: challenge?.currentDay ?? 1,
+    lengthDays,
     startDate: challenge?.startDate ?? null,
     todayDate,
     estimatedFinishDate,
