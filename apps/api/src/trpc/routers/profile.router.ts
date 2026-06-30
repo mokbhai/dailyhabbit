@@ -21,6 +21,11 @@ export const profileRouter = router({
         phone: z.string().min(1).optional(),
         email: z.string().email().optional(),
         timezone: z.string().optional(),
+        avatarUrl: z
+          .string()
+          .regex(/^\/uploads\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/)
+          .nullable()
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

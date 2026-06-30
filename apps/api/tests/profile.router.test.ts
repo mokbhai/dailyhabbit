@@ -215,3 +215,41 @@ describe('profileRouter timezone', () => {
     } satisfies Partial<TRPCError>);
   });
 });
+
+describe('profileRouter avatarUrl', () => {
+  it('persists a valid avatarUrl on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ avatarUrl: '/uploads/abc.jpg' });
+
+    expect(result.avatarUrl).toBe('/uploads/abc.jpg');
+    expect(stores.users.get(USER_ID)?.avatarUrl).toBe('/uploads/abc.jpg');
+  });
+
+  it('clears avatarUrl when set to null', async () => {
+    const stores = legacyUserStore();
+    const user = stores.users.get(USER_ID)!;
+    user.avatarUrl = '/uploads/old.jpg';
+    stores.users.set(USER_ID, user);
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ avatarUrl: null });
+
+    expect(result.avatarUrl).toBeNull();
+    expect(stores.users.get(USER_ID)?.avatarUrl).toBeNull();
+  });
+
+  it.each([
+    'https://evil.com/x.jpg',
+    '/uploads/../x.jpg',
+    'data:image/png;base64,AAAA',
+  ])('rejects invalid avatarUrl %s with BAD_REQUEST', async (avatarUrl) => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(caller.update({ avatarUrl })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    } satisfies Partial<TRPCError>);
+  });
+});

@@ -47,6 +47,8 @@ export async function getProfile(
   };
 }
 
+const UPLOAD_PATH_PATTERN = /^\/uploads\/[A-Za-z0-9_-]+\.[A-Za-z0-9]+$/;
+
 export type UpdateProfileInput = {
   name?: string;
   password?: string;
@@ -55,6 +57,7 @@ export type UpdateProfileInput = {
   phone?: string;
   email?: string;
   timezone?: string;
+  avatarUrl?: string | null;
 };
 
 export async function updateProfile(
@@ -71,6 +74,7 @@ export async function updateProfile(
     phone?: string;
     email?: string;
     timezone?: string;
+    avatarUrl?: string | null;
   } = {};
 
   if (input.name !== undefined) {
@@ -161,6 +165,19 @@ export async function updateProfile(
       });
     }
     data.timezone = input.timezone;
+  }
+
+  if (input.avatarUrl !== undefined) {
+    if (input.avatarUrl === null || input.avatarUrl === '') {
+      data.avatarUrl = null;
+    } else if (!UPLOAD_PATH_PATTERN.test(input.avatarUrl)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Invalid avatar URL',
+      });
+    } else {
+      data.avatarUrl = input.avatarUrl;
+    }
   }
 
   if (Object.keys(data).length === 0) {
