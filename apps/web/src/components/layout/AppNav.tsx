@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { trpc } from '../../lib/trpc';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -7,6 +8,11 @@ const NAV_ITEMS = [
   { href: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
   { href: '/history', label: 'History', icon: '📜' },
   { href: '/profile', label: 'Profile', icon: '👤' },
+] as const;
+
+const ADMIN_NAV_ITEMS = [
+  { href: '/admin/activities', label: 'Edit Activities', icon: '⚙️' },
+  { href: '/admin/group', label: 'Group Settings', icon: '🛠️' },
 ] as const;
 
 type AppNavProps = {
@@ -48,6 +54,11 @@ function NavLink({
 
 export function AppNav({ currentPath = '' }: AppNavProps) {
   const path = currentPath.replace(/\/$/, '') || '/';
+  const profile = trpc.profile.get.useQuery();
+  const showAdminNav =
+    !profile.isLoading &&
+    !profile.isError &&
+    profile.data?.isGroupAdmin === true;
 
   return (
     <>
@@ -72,6 +83,24 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
               active={path === item.href || path.startsWith(`${item.href}/`)}
             />
           ))}
+          {showAdminNav && (
+            <div className="mt-auto border-t border-[var(--border)] pt-4">
+              <p className="mb-2 px-3 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                Admin
+              </p>
+              <div className="flex flex-col gap-1">
+                {ADMIN_NAV_ITEMS.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    {...item}
+                    active={
+                      path === item.href || path.startsWith(`${item.href}/`)
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
