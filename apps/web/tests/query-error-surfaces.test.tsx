@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminGroupContent } from '../src/components/admin/AdminGroupPage';
@@ -15,6 +15,7 @@ const mockStatsActivityCompletion = vi.fn();
 const mockLeaderboardGet = vi.fn();
 const mockLeaderboardSeries = vi.fn();
 const mockGroupsGetMine = vi.fn();
+const mockGroupsGetChallengeRange = vi.fn();
 const mockAuthMe = vi.fn();
 const mockUseMutation = vi.fn((..._args: unknown[]) => ({
   mutate: vi.fn(),
@@ -23,6 +24,8 @@ const mockUseMutation = vi.fn((..._args: unknown[]) => ({
 }));
 const mockRemoveMemberMutate = vi.fn();
 const mockTransferAdminMutate = vi.fn();
+const mockSetChallengeRangeMutate = vi.fn();
+const mockSetChallengeThisWeekMutate = vi.fn();
 let removeMemberMutationState = {
   mutate: mockRemoveMemberMutate,
   isPending: false,
@@ -31,6 +34,18 @@ let removeMemberMutationState = {
 };
 let transferAdminMutationState = {
   mutate: mockTransferAdminMutate,
+  isPending: false,
+  error: null as { message: string } | null,
+  reset: vi.fn(),
+};
+let setChallengeRangeMutationState = {
+  mutate: mockSetChallengeRangeMutate,
+  isPending: false,
+  error: null as { message: string } | null,
+  reset: vi.fn(),
+};
+let setChallengeThisWeekMutationState = {
+  mutate: mockSetChallengeThisWeekMutate,
   isPending: false,
   error: null as { message: string } | null,
   reset: vi.fn(),
@@ -50,6 +65,9 @@ vi.mock('../src/lib/trpc', () => ({
       },
       groups: {
         getMine: {
+          invalidate: mockInvalidate,
+        },
+        getChallengeRange: {
           invalidate: mockInvalidate,
         },
       },
@@ -118,6 +136,9 @@ vi.mock('../src/lib/trpc', () => ({
       getMine: {
         useQuery: (...args: unknown[]) => mockGroupsGetMine(...args),
       },
+      getChallengeRange: {
+        useQuery: (...args: unknown[]) => mockGroupsGetChallengeRange(...args),
+      },
       create: {
         useMutation: (...args: unknown[]) => mockUseMutation(...args),
       },
@@ -129,6 +150,12 @@ vi.mock('../src/lib/trpc', () => ({
       },
       transferAdmin: {
         useMutation: () => transferAdminMutationState,
+      },
+      setChallengeRange: {
+        useMutation: () => setChallengeRangeMutationState,
+      },
+      setChallengeThisWeek: {
+        useMutation: () => setChallengeThisWeekMutationState,
       },
     },
     auth: {
@@ -154,11 +181,14 @@ afterEach(() => {
   mockLeaderboardGet.mockReset();
   mockLeaderboardSeries.mockReset();
   mockGroupsGetMine.mockReset();
+  mockGroupsGetChallengeRange.mockReset();
   mockAuthMe.mockReset();
   mockUseMutation.mockClear();
   mockInvalidate.mockClear();
   mockRemoveMemberMutate.mockReset();
   mockTransferAdminMutate.mockReset();
+  mockSetChallengeRangeMutate.mockReset();
+  mockSetChallengeThisWeekMutate.mockReset();
   removeMemberMutationState = {
     mutate: mockRemoveMemberMutate,
     isPending: false,
@@ -167,6 +197,18 @@ afterEach(() => {
   };
   transferAdminMutationState = {
     mutate: mockTransferAdminMutate,
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  };
+  setChallengeRangeMutationState = {
+    mutate: mockSetChallengeRangeMutate,
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  };
+  setChallengeThisWeekMutationState = {
+    mutate: mockSetChallengeThisWeekMutate,
     isPending: false,
     error: null,
     reset: vi.fn(),
@@ -194,9 +236,9 @@ function errorQuery(message: string, refetch = vi.fn()) {
 
 const dashboardStats = {
   currentDay: 4,
-  lengthDays: 30,
+  lengthDays: 45,
   startDate: new Date('2026-06-01T00:00:00.000Z'),
-  estimatedFinishDate: new Date('2026-06-30T00:00:00.000Z'),
+  estimatedFinishDate: new Date('2026-07-15T00:00:00.000Z'),
   todayDate: new Date('2026-06-04T00:00:00.000Z'),
   totalXp: 100,
   todayNetXp: 10,
@@ -222,6 +264,12 @@ const adminGroup = {
   adminUserId: 'admin-1',
   isAdmin: true,
   inviteUrl: 'http://example.com/join?token=token',
+  challengeRange: {
+    startDate: new Date('2026-06-01T00:00:00.000Z'),
+    endDate: new Date('2026-06-30T00:00:00.000Z'),
+    lengthDays: 30,
+    timezone: 'UTC',
+  },
   members: [
     {
       id: 'admin-1',
@@ -288,7 +336,7 @@ describe('query error surfaces', () => {
     render(<DashboardContent />);
 
     expect(screen.getByText('Unable to load heatmap')).toBeInTheDocument();
-    expect(screen.getByText('30-Day Progress')).toBeInTheDocument();
+    expect(screen.getByText('45-Day Progress')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(refetch).toHaveBeenCalledOnce();
@@ -371,10 +419,69 @@ describe('query error surfaces', () => {
     render(<AdminGroupContent />);
 
     expect(screen.getByText('Iron Will Crew')).toBeInTheDocument();
-    expect(screen.getByText('Challenge Heatmap')).toBeInTheDocument();
+    expect(screen.getByText('30-Day Heatmap')).toBeInTheDocument();
     expect(screen.getByText('Unable to load heatmap')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it('submits a custom challenge range from the admin group page', async () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(adminGroup));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+
+    render(<AdminGroupContent />);
+
+    fireEvent.change(screen.getByLabelText('Start date'), {
+      target: { value: '2026-07-01' },
+    });
+    fireEvent.change(screen.getByLabelText('End date'), {
+      target: { value: '2026-07-31' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Save range' }));
+
+    expect(mockSetChallengeRangeMutate).toHaveBeenCalledOnce();
+    const input = mockSetChallengeRangeMutate.mock.calls[0]?.[0];
+    expect(input).toMatchObject({
+      startDate: expect.any(Date),
+      endDate: expect.any(Date),
+      timezone: expect.any(String),
+    });
+    expect(input.startDate.getFullYear()).toBe(2026);
+    expect(input.startDate.getMonth()).toBe(6);
+    expect(input.startDate.getDate()).toBe(1);
+    expect(input.endDate.getFullYear()).toBe(2026);
+    expect(input.endDate.getMonth()).toBe(6);
+    expect(input.endDate.getDate()).toBe(31);
+  });
+
+  it('applies the backend this-week challenge preset', async () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(adminGroup));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+
+    render(<AdminGroupContent />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'This week' }));
+    expect(mockSetChallengeThisWeekMutate).toHaveBeenCalledOnce();
+  });
+
+  it('blocks invalid challenge range submissions on the client', async () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(adminGroup));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+
+    render(<AdminGroupContent />);
+
+    fireEvent.change(screen.getByLabelText('Start date'), {
+      target: { value: '2026-08-01' },
+    });
+    fireEvent.change(screen.getByLabelText('End date'), {
+      target: { value: '2026-07-31' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Save range' }));
+
+    expect(
+      screen.getByText('Start date must be before or equal to end date.'),
+    ).toBeInTheDocument();
+    expect(mockSetChallengeRangeMutate).not.toHaveBeenCalled();
   });
 });

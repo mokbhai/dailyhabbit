@@ -30,6 +30,13 @@ const STATE_COLORS: Record<HeatmapCellState, string> = {
   not_started: 'bg-[var(--surface-raised)]',
 };
 
+export function getHeatmapColumnCount(cellCount: number): number {
+  if (cellCount <= 7) return Math.max(cellCount, 1);
+  if (cellCount <= 35) return 7;
+
+  return Math.min(24, Math.max(8, Math.ceil(cellCount / 6)));
+}
+
 function CellTooltip({
   cell,
   adminMode,
@@ -116,27 +123,34 @@ export function HeatmapGrid({
   onDayLabelEdit,
   className,
 }: HeatmapGridProps) {
+  const columnCount = getHeatmapColumnCount(cells.length);
+
   return (
-    <div
-      className={cn('grid grid-cols-15 gap-1', className)}
-      style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
-    >
-      {cells.map((cell) => (
-        <div key={cell.dayNumber} className="group relative">
-          <CellTooltip
-            cell={cell}
-            adminMode={adminMode}
-            onDayLabelEdit={onDayLabelEdit}
-          />
-          <div
-            title={`Day ${cell.dayNumber}${cell.dayLabel ? `: ${cell.dayLabel}` : ''}`}
-            className={cn(
-              'aspect-square w-full rounded-sm transition hover:opacity-80',
-              STATE_COLORS[cell.state],
-            )}
-          />
-        </div>
-      ))}
+    <div className={cn('overflow-x-auto pb-2', className)}>
+      <div
+        className="grid min-w-full gap-1"
+        style={{
+          gridTemplateColumns: `repeat(${columnCount}, minmax(1.25rem, 1fr))`,
+          minWidth: `${columnCount * 1.5}rem`,
+        }}
+      >
+        {cells.map((cell) => (
+          <div key={cell.dayNumber} className="group relative">
+            <CellTooltip
+              cell={cell}
+              adminMode={adminMode}
+              onDayLabelEdit={onDayLabelEdit}
+            />
+            <div
+              title={`Day ${cell.dayNumber}${cell.dayLabel ? `: ${cell.dayLabel}` : ''}`}
+              className={cn(
+                'aspect-square w-full rounded-sm transition hover:opacity-80',
+                STATE_COLORS[cell.state],
+              )}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
