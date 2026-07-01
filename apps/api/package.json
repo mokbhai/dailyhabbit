@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@fastify/multipart": "^9.0.3",
+    "@fastify/rate-limit": "^11.1.0",
     "@nestjs/common": "^11.1.21",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.21",
@@ -26,6 +27,7 @@
     "@workspace-starter/db": "workspace:*",
     "@workspace-starter/types": "workspace:*",
     "bcryptjs": "^3.0.2",
+    "fastify": "5.8.5",
     "jsonwebtoken": "^9.0.2",
     "libphonenumber-js": "^1.12.9",
     "openai": "^4.96.0",
