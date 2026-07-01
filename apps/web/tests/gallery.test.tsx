@@ -91,8 +91,7 @@ describe('GalleryContent', () => {
         headers: { Authorization: 'Bearer test-token' },
       }),
     );
-    expect(screen.getAllByText('PASSED').length).toBeGreaterThan(0);
-    expect(screen.getByText('BONUS')).toBeInTheDocument();
+    expect(screen.getAllByText('Verified').length).toBeGreaterThan(0);
   });
 
   it('shows empty state when no photos exist', () => {

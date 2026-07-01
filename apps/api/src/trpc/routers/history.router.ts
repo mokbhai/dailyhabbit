@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import { exportHistoryCsv, listHistory } from '../../services/history.service';
-import { LEGACY_TASK_TYPES } from '../../services/activities.service';
 import { protectedProcedure, router } from '../trpc';
 
 const filtersSchema = z.object({
-  taskType: z.enum(LEGACY_TASK_TYPES).optional(),
+  activityId: z.string().min(1).optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
 });

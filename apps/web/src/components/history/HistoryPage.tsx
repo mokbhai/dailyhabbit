@@ -3,19 +3,8 @@ import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { verdictClass, verdictLabel } from '../../lib/ai-verdict';
 import { trpc } from '../../lib/trpc';
-
-const TASK_TYPES = [
-  { value: '', label: 'All tasks' },
-  { value: 'DIET', label: 'Diet' },
-  { value: 'OUTDOOR_WORKOUT', label: 'Outdoor Workout' },
-  { value: 'INDOOR_WORKOUT', label: 'Indoor Workout' },
-  { value: 'WATER', label: 'Water' },
-  { value: 'READING', label: 'Reading' },
-  { value: 'PROGRESS_PHOTO', label: 'Progress Photo' },
-] as const;
-
-type TaskType = Exclude<(typeof TASK_TYPES)[number]['value'], ''>;
 
 function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString(undefined, {
@@ -25,19 +14,19 @@ function formatDate(date: Date | string) {
   });
 }
 
-function HistoryContent() {
-  const [taskType, setTaskType] = useState<TaskType | ''>('');
+export function HistoryContent() {
+  const [activityId, setActivityId] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
 
   const filters: {
-    taskType?: TaskType;
+    activityId?: string;
     dateFrom?: Date;
     dateTo?: Date;
   } = {};
 
-  if (taskType) filters.taskType = taskType;
+  if (activityId) filters.activityId = activityId;
   if (dateFrom) filters.dateFrom = new Date(dateFrom);
   if (dateTo) filters.dateTo = new Date(dateTo);
 
@@ -71,6 +60,7 @@ function HistoryContent() {
   }
 
   const entries = history.data?.entries ?? [];
+  const availableFilters = history.data?.availableFilters ?? [];
 
   const groupedByDate = new Map<string, typeof entries>();
   for (const entry of entries) {
@@ -111,13 +101,15 @@ function HistoryContent() {
 
       <div className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-2 lg:flex lg:flex-wrap">
         <select
-          value={taskType}
-          onChange={(e) => setTaskType(e.target.value as TaskType | '')}
+          value={activityId}
+          onChange={(e) => setActivityId(e.target.value)}
           className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text-primary)] sm:w-auto"
         >
-          {TASK_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
+          <option value="">All activities</option>
+          {availableFilters.map((filter) => (
+            <option key={filter.activityId} value={filter.activityId}>
+              {filter.emoji ? `${filter.emoji} ` : ''}
+              {filter.title}
             </option>
           ))}
         </select>
@@ -198,17 +190,23 @@ function HistoryContent() {
                           className="flex items-center justify-between rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm"
                         >
                           <span className="text-[var(--text-primary)]">
-                            {task.taskType.replace(/_/g, ' ')}
+                            {task.emoji ? `${task.emoji} ` : ''}
+                            {task.title}
                           </span>
                           <span
                             className={`text-xs ${
-                              task.isValid
-                                ? 'text-[var(--success)]'
-                                : 'text-[var(--accent-red)]'
+                              task.aiVerdict
+                                ? verdictClass(task.aiVerdict)
+                                : task.isValid
+                                  ? 'text-[var(--success)]'
+                                  : 'text-[var(--accent-red)]'
                             }`}
                           >
-                            {task.aiVerdict ??
-                              (task.isValid ? 'Valid' : 'Invalid')}
+                            {task.aiVerdict
+                              ? verdictLabel(task.aiVerdict)
+                              : task.isValid
+                                ? 'Valid'
+                                : 'Invalid'}
                           </span>
                         </li>
                       ) : null,

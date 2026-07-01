@@ -4,7 +4,7 @@ import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
-import { verdictClass } from '../../lib/ai-verdict';
+import { verdictClass, verdictLabel } from '../../lib/ai-verdict';
 import { trpc } from '../../lib/trpc';
 
 const PROGRESS_PHOTO_SEED = 'PROGRESS_PHOTO';
@@ -72,7 +72,7 @@ function Lightbox({
               className={`rounded border px-2 py-0.5 text-[10px] uppercase tracking-wider ${verdictClass(photo.aiVerdict)}`}
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              {photo.aiVerdict}
+              {verdictLabel(photo.aiVerdict)}
             </span>
           )}
         </div>
@@ -220,7 +220,7 @@ export function GalleryContent() {
                             className={`inline-block rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${verdictClass(photo.aiVerdict)}`}
                             style={{ fontFamily: 'var(--font-mono)' }}
                           >
-                            {photo.aiVerdict}
+                            {verdictLabel(photo.aiVerdict)}
                           </span>
                         )}
                       </div>

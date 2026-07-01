@@ -4,10 +4,9 @@ import {
   isInterimDayCompleted,
   isInterimDayFailed,
 } from '../utils/day-completion';
-import type { LegacyTaskType } from './activities.service';
 
 export type HistoryFilters = {
-  taskType?: LegacyTaskType;
+  activityId?: string;
   dateFrom?: Date;
   dateTo?: Date;
 };
@@ -17,7 +16,10 @@ export type HistoryTaskEntry = {
   id: string;
   date: Date;
   dayNumber: number | null;
-  taskType: LegacyTaskType;
+  activityId: string;
+  title: string;
+  emoji: string | null;
+  seedKey: string | null;
   completedAt: Date | null;
   proofUrl: string | null;
   aiVerdict: string | null;
@@ -37,25 +39,31 @@ export type HistoryDayEntry = {
 
 export type HistoryEntry = HistoryTaskEntry | HistoryDayEntry;
 
-const SEED_KEY_TO_TASK_TYPE: Record<string, LegacyTaskType> = {
-  DIET: 'DIET',
-  ACTIVITY: 'OUTDOOR_WORKOUT',
-  WATER: 'WATER',
-  READING: 'READING',
-  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
-  NO_REELS: 'NO_REELS',
-  NO_SOCIAL: 'NO_SOCIAL',
+export type HistoryActivityFilter = {
+  activityId: string;
+  title: string;
+  emoji: string | null;
+  seedKey: string | null;
 };
 
-const TASK_TYPE_TO_SEED_KEY: Partial<Record<LegacyTaskType, string>> = {
-  DIET: 'DIET',
-  OUTDOOR_WORKOUT: 'ACTIVITY',
-  INDOOR_WORKOUT: 'ACTIVITY',
-  WATER: 'WATER',
-  READING: 'READING',
-  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
-  NO_REELS: 'NO_REELS',
-  NO_SOCIAL: 'NO_SOCIAL',
+export type HistoryListResult = {
+  entries: HistoryEntry[];
+  availableFilters: HistoryActivityFilter[];
+};
+
+export type HistoryLogRow = {
+  id: string;
+  date: Date;
+  proofUrl: string | null;
+  aiVerdict: string | null;
+  state: string | null;
+  activity: {
+    id: string;
+    seedKey: string | null;
+    title: string;
+    emoji: string | null;
+  };
+  dayNumber: number | null;
 };
 
 export function isPassingAiVerdict(aiVerdict: string | null): boolean {
@@ -68,11 +76,30 @@ export function resolveDayFailReason(groupId: string | null): string {
     : 'Not all personal activities were logged';
 }
 
+export function extractHistoryFilters(
+  logs: HistoryLogRow[],
+): HistoryActivityFilter[] {
+  const seen = new Map<string, HistoryActivityFilter>();
+
+  for (const log of logs) {
+    const activityId = log.activity.id;
+    if (seen.has(activityId)) continue;
+    seen.set(activityId, {
+      activityId,
+      title: log.activity.title,
+      emoji: log.activity.emoji,
+      seedKey: log.activity.seedKey,
+    });
+  }
+
+  return [...seen.values()].sort((a, b) => a.title.localeCompare(b.title));
+}
+
 export async function listHistory(
   prisma: PrismaService,
   userId: string,
   filters: HistoryFilters = {},
-): Promise<{ entries: HistoryEntry[] }> {
+): Promise<HistoryListResult> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
@@ -82,19 +109,16 @@ export async function listHistory(
   if (filters.dateFrom) dateFilter.gte = filters.dateFrom;
   if (filters.dateTo) dateFilter.lte = filters.dateTo;
 
-  const seedKeyFilter = filters.taskType
-    ? TASK_TYPE_TO_SEED_KEY[filters.taskType]
-    : undefined;
-
   const activityLogs = await prisma.activityLog.findMany({
     where: {
       userId,
-      ...(seedKeyFilter ? { activity: { seedKey: seedKeyFilter } } : {}),
       ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     },
     orderBy: [{ date: 'desc' }],
     include: {
-      activity: { select: { seedKey: true } },
+      activity: {
+        select: { id: true, seedKey: true, title: true, emoji: true },
+      },
       challenge: {
         select: {
           dayScores: {
@@ -113,21 +137,39 @@ export async function listHistory(
     orderBy: { date: 'desc' },
   });
 
-  const entries: HistoryEntry[] = [];
-
-  for (const log of activityLogs) {
+  const rows: HistoryLogRow[] = activityLogs.map((log) => {
     const dayScore = log.challenge.dayScores.find(
       (ds) => ds.date.getTime() === log.date.getTime(),
     );
-    const seedKey = log.activity.seedKey ?? 'DIET';
-    const taskType = SEED_KEY_TO_TASK_TYPE[seedKey] ?? 'DIET';
+    return {
+      id: log.id,
+      date: log.date,
+      proofUrl: log.proofUrl,
+      aiVerdict: log.aiVerdict,
+      state: log.state,
+      activity: log.activity,
+      dayNumber: dayScore?.dayNumber ?? null,
+    };
+  });
 
+  const availableFilters = extractHistoryFilters(rows);
+
+  const filteredRows = filters.activityId
+    ? rows.filter((row) => row.activity.id === filters.activityId)
+    : rows;
+
+  const entries: HistoryEntry[] = [];
+
+  for (const log of filteredRows) {
     entries.push({
       type: 'task',
       id: log.id,
       date: log.date,
-      dayNumber: dayScore?.dayNumber ?? null,
-      taskType,
+      dayNumber: log.dayNumber,
+      activityId: log.activity.id,
+      title: log.activity.title,
+      emoji: log.activity.emoji,
+      seedKey: log.activity.seedKey,
       completedAt: log.state === 'DONE' ? log.date : null,
       proofUrl: log.proofUrl,
       aiVerdict: log.aiVerdict,
@@ -152,7 +194,7 @@ export async function listHistory(
 
   entries.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-  return { entries };
+  return { entries, availableFilters };
 }
 
 function escapeCsv(value: string | number | null | undefined): string {
@@ -175,7 +217,7 @@ export async function exportHistoryCsv(
     'Type',
     'Date',
     'Day Number',
-    'Task Type',
+    'Activity',
     'Completed',
     'Fail Reason',
     'Challenge',
@@ -185,11 +227,14 @@ export async function exportHistoryCsv(
 
   const rows = entries.map((entry) => {
     if (entry.type === 'task') {
+      const activityLabel = entry.emoji
+        ? `${entry.emoji} ${entry.title}`
+        : entry.title;
       return [
         'task',
         entry.date.toISOString(),
         entry.dayNumber ?? '',
-        entry.taskType,
+        activityLabel,
         entry.isValid ? 'yes' : 'no',
         '',
         entry.attemptNumber,
