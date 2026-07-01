@@ -45,6 +45,7 @@ export type TodayActivity = {
   deductMultiplier: number;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
+  currentStreak?: number;
 };
 
 export type GetTodayCache = {
@@ -103,6 +104,10 @@ function findActivity<T extends GetTodayCache>(
   );
 }
 
+function clearCurrentStreak(activity: TodayActivity): TodayActivity {
+  return { ...activity, currentStreak: undefined };
+}
+
 export function applyMutationResult<T extends GetTodayCache>(
   data: T,
   activityId: string,
@@ -110,7 +115,7 @@ export function applyMutationResult<T extends GetTodayCache>(
 ): T {
   const log = mapServerLog(result.log);
   const patch = (activity: TodayActivity): TodayActivity => ({
-    ...activity,
+    ...clearCurrentStreak(activity),
     log,
   });
 
@@ -173,7 +178,10 @@ export function optimisticMarkDone<T extends GetTodayCache>(
     return data;
   }
 
-  const patch = (a: TodayActivity): TodayActivity => ({ ...a, log });
+  const patch = (a: TodayActivity): TodayActivity => ({
+    ...clearCurrentStreak(a),
+    log,
+  });
   return {
     ...data,
     scoredActivities: patchActivityInList(
@@ -194,7 +202,7 @@ export function optimisticUndo<T extends GetTodayCache>(
   activityId: string,
 ): T {
   const patch = (activity: TodayActivity): TodayActivity => ({
-    ...activity,
+    ...clearCurrentStreak(activity),
     log: null,
   });
   return {
@@ -236,7 +244,10 @@ export function optimisticNumberLog<T extends GetTodayCache>(
     aiVerdict: activity.log?.aiVerdict ?? null,
   };
 
-  const patch = (a: TodayActivity): TodayActivity => ({ ...a, log });
+  const patch = (a: TodayActivity): TodayActivity => ({
+    ...clearCurrentStreak(a),
+    log,
+  });
   return {
     ...data,
     scoredActivities: patchActivityInList(
@@ -274,7 +285,10 @@ export function optimisticTierSelect<T extends GetTodayCache>(
     aiVerdict: activity.log?.aiVerdict ?? null,
   };
 
-  const patch = (a: TodayActivity): TodayActivity => ({ ...a, log });
+  const patch = (a: TodayActivity): TodayActivity => ({
+    ...clearCurrentStreak(a),
+    log,
+  });
   return {
     ...data,
     scoredActivities: patchActivityInList(
@@ -315,7 +329,10 @@ export function optimisticSubPoints<T extends GetTodayCache>(
     aiVerdict: activity.log?.aiVerdict ?? null,
   };
 
-  const patch = (a: TodayActivity): TodayActivity => ({ ...a, log });
+  const patch = (a: TodayActivity): TodayActivity => ({
+    ...clearCurrentStreak(a),
+    log,
+  });
   return {
     ...data,
     scoredActivities: patchActivityInList(

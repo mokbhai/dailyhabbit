@@ -227,6 +227,7 @@ function ActivityCard({
       unitLabel={activity.unitLabel}
       xpPerUnit={activity.xpPerUnit}
       xpCap={activity.xpCap}
+      currentStreak={activity.currentStreak}
       subPoints={activity.subPoints}
       tiers={activity.tiers}
       defaultExpanded

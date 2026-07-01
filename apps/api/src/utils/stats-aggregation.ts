@@ -1,4 +1,5 @@
 import { isActivityLogLogged } from './day-completion';
+import { formatLocalDateKey } from './day-window';
 
 /** Ranges longer than this are aggregated into ISO-week buckets server-side. */
 export const SERIES_WEEKLY_BUCKET_THRESHOLD_DAYS = 90;
@@ -28,6 +29,33 @@ export type ActivityCompletionResult = {
   streak: number;
   days: { date: string; state: CompletionDayState }[];
 };
+
+const COMPLETION_ACTIVITY_KINDS = new Set(['CHECKBOX', 'SUBPOINTS', 'TIERED']);
+
+export function isCompletionActivityKind(kind: string): boolean {
+  return COMPLETION_ACTIVITY_KINDS.has(kind);
+}
+
+export function toActivityLogRows(
+  logs: {
+    date: Date;
+    value: number | null;
+    xpAwarded: number;
+    state: string | null;
+    tier: string | null;
+    subPoints: unknown;
+  }[],
+  timezone: string,
+): ActivityLogRow[] {
+  return logs.map((log) => ({
+    date: formatLocalDateKey(log.date, timezone),
+    value: log.value,
+    xpAwarded: log.xpAwarded,
+    state: log.state,
+    tier: log.tier,
+    subPoints: log.subPoints,
+  }));
+}
 
 export type LeaderboardSeriesMetric = 'cumulative' | 'daily';
 

@@ -11,7 +11,19 @@ import type { PrismaService } from '../prisma/prisma.service';
 type PrismaClientLike = PrismaService | Prisma.TransactionClient;
 import { deriveChallengeProgress } from '../utils/challenge-range';
 import { computeDayLoggingStatus } from '../utils/day-completion';
-import { getUserLocalDate, isBeforeMidnight } from '../utils/day-window';
+import {
+  addLocalDays,
+  formatLocalDateKey,
+  getUserLocalDate,
+  isBeforeMidnight,
+} from '../utils/day-window';
+import {
+  clampDateRange,
+  countDaysInclusive,
+  isCompletionActivityKind,
+  shapeActivityCompletion,
+  toActivityLogRows,
+} from '../utils/stats-aggregation';
 import {
   type ActivityLogInput,
   type ActivityLogState,
@@ -89,6 +101,7 @@ export type TodayActivity = {
   deductMultiplier: number;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
+  currentStreak?: number;
 };
 
 export type GetTodayResult = {
@@ -143,6 +156,7 @@ function emptyDayTotals(): DayTotals {
 function mapActivityToToday(
   activity: Activity,
   log: ActivityLog | null,
+  currentStreak?: number,
 ): TodayActivity {
   const scored = mapActivityToScored(activity);
   return {
@@ -176,6 +190,7 @@ function mapActivityToToday(
         }
       : null,
     canAttachProof: activity.seedKey !== 'DIET',
+    ...(currentStreak === undefined ? {} : { currentStreak }),
   };
 }
 
@@ -536,6 +551,86 @@ async function loadUserActivities(
   });
 }
 
+async function loadActivityStreaks(
+  prisma: PrismaClientLike,
+  {
+    activities,
+    challenge,
+    todayDate,
+    timezone,
+    userId,
+  }: {
+    activities: Activity[];
+    challenge: Pick<Challenge, 'id' | 'startDate'>;
+    todayDate: Date;
+    timezone: string;
+    userId: string;
+  },
+): Promise<Map<string, number>> {
+  const completionActivityIds = activities
+    .filter((activity) => isCompletionActivityKind(activity.kind))
+    .map((activity) => activity.id);
+
+  if (completionActivityIds.length === 0) {
+    return new Map();
+  }
+
+  const todayKey = formatLocalDateKey(todayDate, timezone);
+  const range = clampDateRange(
+    formatLocalDateKey(challenge.startDate, timezone),
+    todayKey,
+  );
+  if (range.to < range.from) {
+    return new Map();
+  }
+  const queryFromDate = addLocalDays(
+    todayDate,
+    -(countDaysInclusive(range.from, range.to) - 1),
+    timezone,
+  );
+
+  const logs = await prisma.activityLog.findMany({
+    where: {
+      challengeId: challenge.id,
+      userId,
+      activityId: { in: completionActivityIds },
+      date: {
+        gte: queryFromDate,
+        lte: todayDate,
+      },
+    },
+    select: {
+      activityId: true,
+      date: true,
+      value: true,
+      xpAwarded: true,
+      state: true,
+      tier: true,
+      subPoints: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const logsByActivityId = new Map<string, typeof logs>();
+  for (const log of logs) {
+    const activityLogs = logsByActivityId.get(log.activityId) ?? [];
+    activityLogs.push(log);
+    logsByActivityId.set(log.activityId, activityLogs);
+  }
+
+  return new Map(
+    completionActivityIds.map((activityId) => [
+      activityId,
+      shapeActivityCompletion(
+        toActivityLogRows(logsByActivityId.get(activityId) ?? [], timezone),
+        range.from,
+        range.to,
+        todayKey,
+      ).streak,
+    ]),
+  );
+}
+
 async function findActiveChallenge(prisma: PrismaService, userId: string) {
   return prisma.challenge.findFirst({
     where: { userId, isActive: true },
@@ -669,6 +764,13 @@ export class ActivitiesService {
     });
 
     const logByActivityId = new Map(logs.map((log) => [log.activityId, log]));
+    const streakByActivityId = await loadActivityStreaks(prisma, {
+      activities,
+      challenge,
+      todayDate,
+      timezone: user.timezone,
+      userId,
+    });
 
     const todayScore = await prisma.dayScore.findFirst({
       where: { challengeId: challenge.id, date: todayDate },
@@ -700,6 +802,7 @@ export class ActivitiesService {
       const today = mapActivityToToday(
         activity,
         logByActivityId.get(activity.id) ?? null,
+        streakByActivityId.get(activity.id),
       );
       if (activity.isPersonal) {
         personalActivities.push(today);

@@ -219,7 +219,8 @@ function createFakePrisma(seed: FakePrismaSeed) {
         where: {
           challengeId?: string;
           userId?: string;
-          date?: Date;
+          activityId?: string | { in: string[] };
+          date?: Date | { gte?: Date; lte?: Date };
         };
       }) =>
         [...activityLogs.values()]
@@ -233,11 +234,34 @@ function createFakePrisma(seed: FakePrismaSeed) {
             if (where.userId !== undefined && log.userId !== where.userId) {
               return false;
             }
-            if (
-              where.date !== undefined &&
-              log.date.getTime() !== where.date.getTime()
-            ) {
-              return false;
+            if (where.activityId !== undefined) {
+              if (typeof where.activityId === 'string') {
+                if (log.activityId !== where.activityId) {
+                  return false;
+                }
+              } else if (!where.activityId.in.includes(log.activityId)) {
+                return false;
+              }
+            }
+            if (where.date !== undefined) {
+              if (where.date instanceof Date) {
+                if (log.date.getTime() !== where.date.getTime()) {
+                  return false;
+                }
+              } else {
+                if (
+                  where.date.gte !== undefined &&
+                  log.date.getTime() < where.date.gte.getTime()
+                ) {
+                  return false;
+                }
+                if (
+                  where.date.lte !== undefined &&
+                  log.date.getTime() > where.date.lte.getTime()
+                ) {
+                  return false;
+                }
+              }
             }
             return true;
           })
@@ -413,6 +437,41 @@ const CHECKBOX_ACTIVITY_ID = 'act-progress-photo';
 const DIET_ACTIVITY_ID = 'act-diet';
 const PERSONAL_ACTIVITY_ID = 'act-personal';
 const WATER_ACTIVITY_ID = 'act-water';
+
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function createActivityLog({
+  activityId,
+  date,
+  id = `${activityId}-${date.toISOString()}`,
+  state = 'DONE',
+  value = null,
+}: {
+  activityId: string;
+  date: Date;
+  id?: string;
+  state?: ActivityLog['state'];
+  value?: number | null;
+}): ActivityLog {
+  return {
+    id,
+    challengeId: CHALLENGE_ID,
+    userId: USER_ID,
+    activityId,
+    date,
+    value,
+    tier: null,
+    subPoints: null,
+    state,
+    xpAwarded: state === 'DONE' || value != null ? 100 : 0,
+    proofUrl: null,
+    aiVerdict: null,
+  };
+}
 
 function createActivitiesFixture() {
   const today = getUserLocalDate('UTC');
@@ -971,6 +1030,111 @@ describe('activities service', () => {
       xpDeducted: 0,
     });
     expect(result.currentDay).toBe(1);
+  });
+
+  it('getToday returns current streaks for completion activities', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const twoDaysAgo = addUtcDays(today, -2);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: twoDaysAgo,
+      currentDay: 3,
+    });
+
+    for (const log of [
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: yesterday,
+        id: 'photo-yesterday',
+      }),
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: today,
+        id: 'photo-today',
+      }),
+      createActivityLog({
+        activityId: PERSONAL_ACTIVITY_ID,
+        date: today,
+        id: 'personal-today',
+      }),
+      createActivityLog({
+        activityId: WATER_ACTIVITY_ID,
+        date: today,
+        id: 'water-today',
+        value: 3,
+      }),
+    ]) {
+      fake.stores.activityLogs.set(
+        activityLogKey(log.challengeId, log.activityId, log.date),
+        log,
+      );
+    }
+
+    const result = await service.getToday(fake.prisma, USER_ID);
+    const progressPhoto = result.scoredActivities.find(
+      (activity) => activity.id === CHECKBOX_ACTIVITY_ID,
+    );
+    const diet = result.scoredActivities.find(
+      (activity) => activity.id === DIET_ACTIVITY_ID,
+    );
+    const water = result.scoredActivities.find(
+      (activity) => activity.id === WATER_ACTIVITY_ID,
+    );
+
+    expect(progressPhoto?.currentStreak).toBe(2);
+    expect(diet?.currentStreak).toBe(0);
+    expect(result.personalActivities[0]?.currentStreak).toBe(1);
+    expect(water).not.toHaveProperty('currentStreak');
+  });
+
+  it('getToday resets current streaks when today is failed or unlogged', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: yesterday,
+      currentDay: 2,
+    });
+
+    for (const log of [
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: yesterday,
+        id: 'photo-yesterday',
+      }),
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: today,
+        id: 'photo-today-failed',
+        state: 'FAILED',
+      }),
+      createActivityLog({
+        activityId: DIET_ACTIVITY_ID,
+        date: yesterday,
+        id: 'diet-yesterday',
+      }),
+    ]) {
+      fake.stores.activityLogs.set(
+        activityLogKey(log.challengeId, log.activityId, log.date),
+        log,
+      );
+    }
+
+    const result = await service.getToday(fake.prisma, USER_ID);
+    const progressPhoto = result.scoredActivities.find(
+      (activity) => activity.id === CHECKBOX_ACTIVITY_ID,
+    );
+    const diet = result.scoredActivities.find(
+      (activity) => activity.id === DIET_ACTIVITY_ID,
+    );
+
+    expect(progressPhoto?.currentStreak).toBe(0);
+    expect(diet?.currentStreak).toBe(0);
   });
 
   it('recomputeLiveDayScore persists dayCounted as breakdown.allScoredLogged for personal-only users', async () => {
