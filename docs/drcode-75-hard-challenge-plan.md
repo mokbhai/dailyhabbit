@@ -286,7 +286,7 @@ Desktop: fixed left sidebar.
 
 #### 3c. Consistency stats
 
-Current streak · Longest streak · Total days completed · Success rate · Times restarted.
+Current streak · Longest streak · Total days completed · Success rate · Total XP.
 
 **tRPC:** `stats.getDashboard`
 
@@ -475,7 +475,6 @@ model Attempt {
   isActive        Boolean   @default(true)
   currentDay      Int       @default(1)
   longestStreak   Int       @default(0)
-  timesRestarted  Int       @default(0)
   taskLogs        TaskLog[]
   dayResults      DayResult[]
 }
