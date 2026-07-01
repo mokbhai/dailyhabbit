@@ -4,6 +4,15 @@ import {
   isInterimDayCompleted,
   isInterimDayFailed,
 } from '../utils/day-completion';
+import {
+  computeActivityXp,
+  type ActivityKind,
+  type ActivityLogInput,
+  type ActivityLogState,
+  type ScoredActivity,
+  type SubPointConfig,
+  type TierConfig,
+} from './scoring.service';
 
 export type HistoryFilters = {
   activityId?: string;
@@ -57,17 +66,77 @@ export type HistoryLogRow = {
   proofUrl: string | null;
   aiVerdict: string | null;
   state: string | null;
+  tier: string | null;
+  value: number | null;
+  subPoints: unknown;
   activity: {
     id: string;
     seedKey: string | null;
     title: string;
     emoji: string | null;
+    kind: ActivityKind;
+    scored: boolean;
+    isPersonal: boolean;
+    deductMultiplier: number;
+    xpComplete: number | null;
+    xpMiss: number | null;
+    unitLabel: string | null;
+    xpPerUnit: number | null;
+    xpCap: number | null;
+    missXp: number | null;
+    subPoints: unknown;
+    tiers: unknown;
   };
   dayNumber: number | null;
 };
 
 export function isPassingAiVerdict(aiVerdict: string | null): boolean {
   return aiVerdict !== 'FAILED' && aiVerdict !== 'ERROR';
+}
+
+function mapHistoryActivityToScored(
+  activity: HistoryLogRow['activity'],
+): ScoredActivity {
+  return {
+    id: activity.id,
+    kind: activity.kind,
+    scored: activity.scored,
+    isPersonal: activity.isPersonal,
+    deductMultiplier: activity.deductMultiplier,
+    xpComplete: activity.xpComplete ?? undefined,
+    xpMiss: activity.xpMiss ?? undefined,
+    unitLabel: activity.unitLabel ?? undefined,
+    xpPerUnit: activity.xpPerUnit ?? undefined,
+    xpCap: activity.xpCap ?? undefined,
+    missXp: activity.missXp ?? undefined,
+    subPoints: (activity.subPoints ?? undefined) as
+      | SubPointConfig[]
+      | undefined,
+    tiers: (activity.tiers ?? undefined) as TierConfig[] | undefined,
+  };
+}
+
+function mapHistoryLogToInput(log: HistoryLogRow): ActivityLogInput {
+  return {
+    activityId: log.activity.id,
+    state: (log.state as ActivityLogState | null) ?? undefined,
+    value: log.value,
+    tier: log.tier,
+    subPoints:
+      (log.subPoints as Record<string, ActivityLogState> | null) ?? undefined,
+  };
+}
+
+export function deriveHistoryTaskState(log: HistoryLogRow): ActivityLogState {
+  return computeActivityXp(
+    mapHistoryActivityToScored(log.activity),
+    mapHistoryLogToInput(log),
+    { applyGrace: false },
+  ).state;
+}
+
+export function isHistoryTaskCompleted(log: HistoryLogRow): boolean {
+  return deriveHistoryTaskState(log) === 'DONE';
 }
 
 export function resolveDayFailReason(groupId: string | null): string {
@@ -117,7 +186,24 @@ export async function listHistory(
     orderBy: [{ date: 'desc' }],
     include: {
       activity: {
-        select: { id: true, seedKey: true, title: true, emoji: true },
+        select: {
+          id: true,
+          seedKey: true,
+          title: true,
+          emoji: true,
+          kind: true,
+          scored: true,
+          isPersonal: true,
+          deductMultiplier: true,
+          xpComplete: true,
+          xpMiss: true,
+          unitLabel: true,
+          xpPerUnit: true,
+          xpCap: true,
+          missXp: true,
+          subPoints: true,
+          tiers: true,
+        },
       },
       challenge: {
         select: {
@@ -147,6 +233,9 @@ export async function listHistory(
       proofUrl: log.proofUrl,
       aiVerdict: log.aiVerdict,
       state: log.state,
+      tier: log.tier,
+      value: log.value,
+      subPoints: log.subPoints,
       activity: log.activity,
       dayNumber: dayScore?.dayNumber ?? null,
     };
@@ -161,6 +250,7 @@ export async function listHistory(
   const entries: HistoryEntry[] = [];
 
   for (const log of filteredRows) {
+    const completed = isHistoryTaskCompleted(log);
     entries.push({
       type: 'task',
       id: log.id,
@@ -170,10 +260,10 @@ export async function listHistory(
       title: log.activity.title,
       emoji: log.activity.emoji,
       seedKey: log.activity.seedKey,
-      completedAt: log.state === 'DONE' ? log.date : null,
+      completedAt: completed ? log.date : null,
       proofUrl: log.proofUrl,
       aiVerdict: log.aiVerdict,
-      isValid: log.state === 'DONE' && isPassingAiVerdict(log.aiVerdict),
+      isValid: completed && isPassingAiVerdict(log.aiVerdict),
       attemptNumber: 1,
     });
   }
