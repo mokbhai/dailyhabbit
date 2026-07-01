@@ -33,7 +33,6 @@ export type DashboardStats = {
   longestStreak: number;
   totalDaysCompleted: number;
   successRate: number;
-  timesRestarted: number;
 };
 
 export async function getDashboardStats(
@@ -125,7 +124,6 @@ export async function getDashboardStats(
       : 0,
     totalDaysCompleted,
     successRate,
-    timesRestarted: 0,
   };
 }
 

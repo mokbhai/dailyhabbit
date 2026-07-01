@@ -4,13 +4,16 @@ import {
   type Activity,
   type ActivityLog,
   type Challenge,
+  type DayScore,
   type User,
 } from '@workspace-starter/db';
 import {
   getActivityCompletion,
   getActivitySeries,
+  getDashboardStats,
 } from '../src/services/stats.service';
 import { challengeDisplayOrderBy } from '../src/utils/challenge-query';
+import { getUserLocalDate } from '../src/utils/day-window';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 const USER_ID = 'user-1';
@@ -21,6 +24,7 @@ type FakePrismaSeed = {
   challenges: Challenge[];
   activities: Activity[];
   activityLogs: ActivityLog[];
+  dayScores?: DayScore[];
 };
 
 function sortChallenges(
@@ -48,6 +52,7 @@ function createFakePrisma(seed: FakePrismaSeed) {
     seed.activities.map((activity) => [activity.id, { ...activity }]),
   );
   const activityLogs = [...seed.activityLogs.map((log) => ({ ...log }))];
+  const dayScores = [...(seed.dayScores ?? []).map((day) => ({ ...day }))];
 
   const prisma = {
     user: {
@@ -83,6 +88,27 @@ function createFakePrisma(seed: FakePrismaSeed) {
     activity: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         activities.get(where.id) ?? null,
+      findMany: async ({
+        where,
+      }: {
+        where: { OR?: Array<Partial<Activity>> };
+      }) => {
+        return [...activities.values()]
+          .filter((activity) => {
+            if (!where.OR) return true;
+            return where.OR.some((condition) =>
+              Object.entries(condition).every(
+                ([key, value]) =>
+                  activity[key as keyof Activity] === (value as never),
+              ),
+            );
+          })
+          .map((activity) => ({
+            id: activity.id,
+            scored: activity.scored,
+            isPersonal: activity.isPersonal,
+          }));
+      },
     },
     activityLog: {
       findMany: async ({
@@ -138,6 +164,38 @@ function createFakePrisma(seed: FakePrismaSeed) {
           tier: log.tier,
           subPoints: log.subPoints,
         }));
+      },
+    },
+    dayScore: {
+      findMany: async ({
+        where,
+      }: {
+        where: { challenge?: { userId?: string } };
+      }) => {
+        return dayScores
+          .filter((day) => {
+            if (where.challenge?.userId === undefined) return true;
+            const challenge = challenges.get(day.challengeId);
+            return challenge?.userId === where.challenge.userId;
+          })
+          .map((day) => ({
+            finalized: day.finalized,
+            breakdown: day.breakdown,
+          }));
+      },
+      findFirst: async ({
+        where,
+      }: {
+        where: { challengeId: string; date: Date };
+      }) => {
+        const match = dayScores.find(
+          (day) =>
+            day.challengeId === where.challengeId &&
+            day.date.getTime() === where.date.getTime(),
+        );
+        return match
+          ? { netXp: match.netXp, finalized: match.finalized }
+          : null;
       },
     },
   };
@@ -256,9 +314,71 @@ function makeLog(
   };
 }
 
+function makeDayScore(
+  challengeId: string,
+  date: string,
+  overrides: Partial<DayScore> = {},
+): DayScore {
+  return {
+    id: `score-${challengeId}-${date}`,
+    challengeId,
+    userId: USER_ID,
+    date: new Date(`${date}T00:00:00.000Z`),
+    dayNumber: 1,
+    xpEarned: 0,
+    xpDeducted: 0,
+    netXp: 0,
+    personalXp: 0,
+    breakdown: [],
+    finalized: false,
+    ...overrides,
+  };
+}
+
 describe('stats.service', () => {
   const from = new Date('2026-06-01T00:00:00.000Z');
   const to = new Date('2026-06-03T00:00:00.000Z');
+
+  describe('getDashboardStats', () => {
+    it('returns XP-era dashboard stats without a restart counter', async () => {
+      const challengeId = 'challenge-active';
+      const today = getUserLocalDate('UTC');
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [
+          makeChallenge(challengeId, {
+            isActive: true,
+            totalXp: 900,
+            currentStreak: 2,
+            longestStreak: 4,
+          }),
+        ],
+        activities: [],
+        activityLogs: [],
+        dayScores: [
+          makeDayScore(challengeId, '2026-06-01', {
+            finalized: true,
+            breakdown: { allScoredLogged: true },
+          }),
+          makeDayScore(challengeId, '2026-06-02', {
+            finalized: true,
+            breakdown: { allScoredLogged: false },
+          }),
+          makeDayScore(challengeId, today.toISOString().slice(0, 10), {
+            netXp: 75,
+          }),
+        ],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.totalXp).toBe(975);
+      expect(result.todayNetXp).toBe(75);
+      expect(result.totalDaysCompleted).toBe(1);
+      expect(result.successRate).toBe(50);
+      expect(result).not.toHaveProperty('timesRestarted');
+    });
+  });
 
   describe('getActivitySeries', () => {
     it('returns series for a user whose only challenge is inactive', async () => {
