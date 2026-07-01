@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GalleryContent } from '../src/components/gallery/GalleryPage';
 
 const mockUseQuery = vi.fn();
@@ -18,6 +18,17 @@ vi.mock('../src/lib/trpc', () => ({
 afterEach(() => {
   vi.restoreAllMocks();
   mockUseQuery.mockReset();
+});
+
+beforeEach(() => {
+  window.localStorage.setItem('drcode_token', 'test-token');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob(['image'], { type: 'image/jpeg' }),
+    })),
+  );
 });
 
 const sampleData = {
@@ -63,7 +74,7 @@ const sampleData = {
 };
 
 describe('GalleryContent', () => {
-  it('renders day groups with thumbnails for gallery data', () => {
+  it('renders day groups with thumbnails for gallery data', async () => {
     mockUseQuery.mockReturnValue({
       data: sampleData,
       isLoading: false,
@@ -73,7 +84,13 @@ describe('GalleryContent', () => {
 
     expect(screen.getByText(/Day 2/i)).toBeInTheDocument();
     expect(screen.getByText(/Day 1/i)).toBeInTheDocument();
-    expect(screen.getAllByRole('img')).toHaveLength(2);
+    expect(await screen.findAllByRole('img')).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/uploads/day2.jpg',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer test-token' },
+      }),
+    );
     expect(screen.getAllByText('PASSED').length).toBeGreaterThan(0);
     expect(screen.getByText('BONUS')).toBeInTheDocument();
   });
@@ -100,13 +117,13 @@ describe('GalleryContent', () => {
 
     render(<GalleryContent />);
 
-    const thumbnail = screen.getAllByAltText('Progress Photo')[0]!;
+    const thumbnail = (await screen.findAllByAltText('Progress Photo'))[0]!;
     await userEvent.click(thumbnail.closest('button')!);
 
     expect(
       screen.getByRole('dialog', { name: /photo preview/i }),
     ).toBeInTheDocument();
-    expect(screen.getAllByAltText('Progress Photo')).toHaveLength(3);
+    expect(await screen.findAllByAltText('Progress Photo')).toHaveLength(3);
 
     await userEvent.click(
       screen.getByRole('button', { name: /close preview/i }),

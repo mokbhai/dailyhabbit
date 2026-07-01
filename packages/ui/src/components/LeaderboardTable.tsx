@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { cn } from '../utils/cn';
 
 export type LeaderboardMember = {
@@ -24,6 +25,7 @@ export type LeaderboardTableProps = {
   sortBy: LeaderboardSortBy;
   onSortChange: (sortBy: LeaderboardSortBy) => void;
   highlightUserId?: string;
+  renderAvatar?: (member: LeaderboardMember) => ReactNode;
   className?: string;
 };
 
@@ -40,6 +42,7 @@ export function LeaderboardTable({
   sortBy,
   onSortChange,
   highlightUserId,
+  renderAvatar,
   className,
 }: LeaderboardTableProps) {
   return (
@@ -106,7 +109,9 @@ export function LeaderboardTable({
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--text-muted)]">
-                      {member.avatarUrl ? (
+                      {renderAvatar ? (
+                        renderAvatar(member)
+                      ) : member.avatarUrl ? (
                         <img
                           src={member.avatarUrl}
                           alt=""

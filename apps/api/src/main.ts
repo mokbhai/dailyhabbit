@@ -5,7 +5,6 @@ import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import multipart from '@fastify/multipart';
-import fastifyStatic from '@fastify/static';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
@@ -14,7 +13,10 @@ import { ActivitiesService } from './services/activities.service';
 import { GuidanceService } from './services/guidance.service';
 import { appRouter } from './trpc/router';
 import { createContextFactory } from './trpc/context';
-import { createUploadHandler } from './uploads/upload-handler';
+import {
+  createUploadFileHandler,
+  createUploadHandler,
+} from './uploads/upload-handler';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -77,15 +79,13 @@ async function bootstrap() {
     },
   });
 
-  await fastify.register(fastifyStatic, {
-    root: uploadDir,
-    prefix: '/uploads/',
-    decorateReply: false,
-  });
-
   fastify.post(
     '/api/uploads',
     createUploadHandler({ uploadDir, authService, prisma }),
+  );
+  fastify.get<{ Params: { filename?: string } }>(
+    '/uploads/:filename',
+    createUploadFileHandler({ uploadDir, authService, prisma }),
   );
 
   await fastify.register(fastifyTRPCPlugin, {

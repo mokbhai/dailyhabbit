@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   authenticateUpload,
+  createUploadFileHandler,
   createUploadHandler,
+  resolveUploadFilePath,
   sanitizeUploadExtension,
 } from '../src/uploads/upload-handler';
 
@@ -94,6 +99,101 @@ describe('createUploadHandler', () => {
     expect(status).toHaveBeenCalledWith(401);
     expect(send).toHaveBeenCalledWith({ error: 'Unauthorized' });
     expect(file).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveUploadFilePath', () => {
+  it('resolves valid upload filenames inside uploadDir', () => {
+    expect(resolveUploadFilePath('/tmp/uploads', 'abc-123.jpg')).toBe(
+      path.resolve('/tmp/uploads/abc-123.jpg'),
+    );
+  });
+
+  it.each(['../secret.jpg', '..%2Fsecret.jpg', 'nested/file.jpg', 'file.svg'])(
+    'rejects invalid filename %s',
+    (filename) => {
+      expect(resolveUploadFilePath('/tmp/uploads', filename)).toBeNull();
+    },
+  );
+});
+
+describe('createUploadFileHandler', () => {
+  function createReply() {
+    const send = vi.fn();
+    const status = vi.fn(() => ({ send }));
+    const header = vi.fn(() => ({ header, send }));
+    return { reply: { status, header, send }, send, status, header };
+  }
+
+  it('returns 401 when authorization is missing', async () => {
+    const { reply, status, send } = createReply();
+    const handler = createUploadFileHandler({
+      uploadDir: '/tmp/uploads',
+      authService: { verifyToken: () => null },
+      prisma: { user: { findUnique: vi.fn() } },
+    });
+
+    await handler(
+      { headers: {}, params: { filename: 'abc.jpg' } },
+      reply as never,
+    );
+
+    expect(status).toHaveBeenCalledWith(401);
+    expect(send).toHaveBeenCalledWith({ error: 'Unauthorized' });
+  });
+
+  it('returns 404 for traversal-like filenames', async () => {
+    const { reply, status, send } = createReply();
+    const handler = createUploadFileHandler({
+      uploadDir: '/tmp/uploads',
+      authService: { verifyToken: () => ({ userId: USER_ID }) },
+      prisma: { user: { findUnique: vi.fn(async () => ({ id: USER_ID })) } },
+    });
+
+    await handler(
+      {
+        headers: { authorization: 'Bearer token' },
+        params: { filename: '../x.jpg' },
+      },
+      reply as never,
+    );
+
+    expect(status).toHaveBeenCalledWith(404);
+    expect(send).toHaveBeenCalledWith({ error: 'Not found' });
+  });
+
+  it('streams an existing upload for an authenticated user', async () => {
+    const uploadDir = await mkdtemp(path.join(tmpdir(), 'uploads-'));
+    try {
+      await writeFile(path.join(uploadDir, 'proof.jpg'), 'image-bytes');
+      const { reply, header, send } = createReply();
+      const handler = createUploadFileHandler({
+        uploadDir,
+        authService: { verifyToken: () => ({ userId: USER_ID }) },
+        prisma: {
+          user: { findUnique: vi.fn(async () => ({ id: USER_ID })) },
+        },
+      });
+
+      await handler(
+        {
+          headers: { authorization: 'Bearer token' },
+          params: { filename: 'proof.jpg' },
+        },
+        reply as never,
+      );
+
+      expect(header).toHaveBeenCalledWith('Content-Type', 'image/jpeg');
+      expect(header).toHaveBeenCalledWith(
+        'Cache-Control',
+        'private, max-age=300',
+      );
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ pipe: expect.any(Function) }),
+      );
+    } finally {
+      await rm(uploadDir, { force: true, recursive: true });
+    }
   });
 });
 
