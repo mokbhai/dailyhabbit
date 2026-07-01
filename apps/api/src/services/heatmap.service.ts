@@ -9,6 +9,7 @@ import {
   isInterimDayCompleted,
   isInterimDayFailed,
 } from '../utils/day-completion';
+import { isGroupAdmin } from '../utils/group-admin';
 
 export type HeatmapCellState =
   | 'completed'
@@ -101,9 +102,11 @@ export async function getHeatmap(
     });
   }
 
-  const isGroupAdmin = user.group?.adminUserId === userId;
+  const isAdmin = user.group
+    ? await isGroupAdmin(prisma, user.group.id, userId, user.group.adminUserId)
+    : false;
 
-  return { cells, isGroupAdmin };
+  return { cells, isGroupAdmin: isAdmin };
 }
 
 export async function setDayLabel(
@@ -124,7 +127,7 @@ export async function setDayLabel(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
   }
 
-  if (group.adminUserId !== userId) {
+  if (!(await isGroupAdmin(prisma, group.id, userId, group.adminUserId))) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
   }
 

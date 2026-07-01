@@ -29,11 +29,19 @@ const LOG_ID = 'log-1';
 function createFakePrisma(seed: {
   users: User[];
   groups: Group[];
+  groupAdmins?: { groupId: string; userId: string; createdAt: Date }[];
   activities: Activity[];
   activityLogs?: ActivityLog[];
 }) {
   const users = new Map(seed.users.map((u) => [u.id, { ...u }]));
   const groups = new Map(seed.groups.map((g) => [g.id, { ...g }]));
+  const groupAdmins =
+    seed.groupAdmins ??
+    seed.groups.map((group) => ({
+      groupId: group.id,
+      userId: group.adminUserId,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    }));
   const activities = new Map(seed.activities.map((a) => [a.id, { ...a }]));
   const activityLogs = new Map(
     (seed.activityLogs ?? []).map((log) => [log.id, { ...log }]),
@@ -50,6 +58,19 @@ function createFakePrisma(seed: {
     group: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         groups.get(where.id) ?? null,
+    },
+    groupAdmin: {
+      findMany: async ({
+        where,
+      }: {
+        where: { groupId: string };
+        select?: { userId?: boolean };
+        orderBy?: unknown;
+      }) =>
+        groupAdmins
+          .filter((admin) => admin.groupId === where.groupId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+          .map((admin) => ({ userId: admin.userId })),
     },
     activity: {
       findUnique: async ({ where }: { where: { id: string } }) =>

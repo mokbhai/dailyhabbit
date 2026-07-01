@@ -285,6 +285,7 @@ type StoredChallenge = {
   isActive: boolean;
   startDate: Date;
   endDate: Date | null;
+  stoppedAt: Date | null;
 };
 
 function createLeaveGroupContext(stores: {
@@ -292,6 +293,10 @@ function createLeaveGroupContext(stores: {
   usersByPhone: Map<string, StoredUser>;
   usersByEmail: Map<string, StoredUser>;
   groups: Map<string, StoredGroup>;
+  groupAdmins: Map<
+    string,
+    { groupId: string; userId: string; createdAt: Date }
+  >;
   challenges: Map<string, StoredChallenge>;
   callerId: string;
 }): Context {
@@ -344,6 +349,63 @@ function createLeaveGroupContext(stores: {
         },
       ),
     },
+    group: {
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<StoredGroup>;
+        }) => {
+          const group = stores.groups.get(where.id);
+          if (!group) throw new Error('Group not found');
+          const updated = { ...group, ...data };
+          stores.groups.set(where.id, updated);
+          return updated;
+        },
+      ),
+    },
+    groupAdmin: {
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { groupId: string };
+          select?: { userId?: boolean };
+          orderBy?: unknown;
+        }) =>
+          [...stores.groupAdmins.values()]
+            .filter((admin) => admin.groupId === where.groupId)
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+            .map((admin) => ({ userId: admin.userId })),
+      ),
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { groupId: string; userId?: { not: string } };
+          select?: { userId?: boolean };
+          orderBy?: unknown;
+        }) =>
+          [...stores.groupAdmins.values()]
+            .filter(
+              (admin) =>
+                admin.groupId === where.groupId &&
+                admin.userId !== where.userId?.not,
+            )
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+            .map((admin) => ({ userId: admin.userId }))[0] ?? null,
+      ),
+      deleteMany: vi.fn(
+        async ({ where }: { where: { groupId: string; userId: string } }) => {
+          const deleted = stores.groupAdmins.delete(
+            `${where.groupId}:${where.userId}`,
+          );
+          return { count: deleted ? 1 : 0 };
+        },
+      ),
+    },
     challenge: {
       update: vi.fn(
         async ({
@@ -351,7 +413,7 @@ function createLeaveGroupContext(stores: {
           data,
         }: {
           where: { id: string };
-          data: { isActive?: boolean; endDate?: Date };
+          data: { isActive?: boolean; stoppedAt?: Date };
         }) => {
           const challenge = stores.challenges.get(where.id);
           if (!challenge) throw new Error('Challenge not found');
@@ -415,6 +477,10 @@ function memberLeaveStores(): {
   usersByPhone: Map<string, StoredUser>;
   usersByEmail: Map<string, StoredUser>;
   groups: Map<string, StoredGroup>;
+  groupAdmins: Map<
+    string,
+    { groupId: string; userId: string; createdAt: Date }
+  >;
   challenges: Map<string, StoredChallenge>;
   callerId: string;
 } {
@@ -444,6 +510,18 @@ function memberLeaveStores(): {
         isActive: true,
         startDate: new Date('2026-06-01T00:00:00.000Z'),
         endDate: null,
+        stoppedAt: null,
+      },
+    ],
+  ]);
+
+  const groupAdmins = new Map([
+    [
+      `${GROUP_ID}:${ADMIN_ID}`,
+      {
+        groupId: GROUP_ID,
+        userId: ADMIN_ID,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },
     ],
   ]);
@@ -453,6 +531,7 @@ function memberLeaveStores(): {
     usersByPhone: new Map(),
     usersByEmail: new Map([['member@example.com', member]]),
     groups,
+    groupAdmins,
     challenges,
     callerId: USER_ID,
   };
@@ -468,7 +547,7 @@ describe('profileRouter leaveGroup', () => {
     expect(result).toEqual({ success: true });
     expect(stores.users.get(USER_ID)?.groupId).toBeNull();
     expect(stores.challenges.get(CHALLENGE_ID)?.isActive).toBe(false);
-    expect(stores.challenges.get(CHALLENGE_ID)?.endDate).toBeDefined();
+    expect(stores.challenges.get(CHALLENGE_ID)?.stoppedAt).toBeDefined();
   });
 
   it('rejects leaveGroup when user is not in a group', async () => {
@@ -482,15 +561,38 @@ describe('profileRouter leaveGroup', () => {
     } satisfies Partial<TRPCError>);
   });
 
-  it('rejects leaveGroup when caller is the group admin', async () => {
+  it('rejects leaveGroup when caller is the last group admin', async () => {
     const stores = memberLeaveStores();
     stores.groups.get(GROUP_ID)!.adminUserId = USER_ID;
+    stores.groupAdmins.clear();
+    stores.groupAdmins.set(`${GROUP_ID}:${USER_ID}`, {
+      groupId: GROUP_ID,
+      userId: USER_ID,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
     const caller = profileRouter.createCaller(createLeaveGroupContext(stores));
 
     await expect(caller.leaveGroup()).rejects.toMatchObject({
       code: 'BAD_REQUEST',
-      message: 'Transfer admin before leaving the group',
+      message: 'Promote another admin before leaving the group',
     } satisfies Partial<TRPCError>);
+  });
+
+  it('lets a secondary admin leave and removes their admin grant', async () => {
+    const stores = memberLeaveStores();
+    stores.groupAdmins.set(`${GROUP_ID}:${USER_ID}`, {
+      groupId: GROUP_ID,
+      userId: USER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const caller = profileRouter.createCaller(createLeaveGroupContext(stores));
+
+    const result = await caller.leaveGroup();
+
+    expect(result).toEqual({ success: true });
+    expect(stores.users.get(USER_ID)?.groupId).toBeNull();
+    expect(stores.groupAdmins.has(`${GROUP_ID}:${USER_ID}`)).toBe(false);
+    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(ADMIN_ID);
   });
 
   it('rejects leaveGroup when user is not found', async () => {

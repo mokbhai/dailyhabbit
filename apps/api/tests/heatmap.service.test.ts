@@ -39,9 +39,16 @@ type StoredGroup = {
   challengeTimezone?: string | null;
 };
 
+type StoredGroupAdmin = {
+  groupId: string;
+  userId: string;
+  createdAt: Date;
+};
+
 type FakePrismaSeed = {
   users: User[];
   groups: StoredGroup[];
+  groupAdmins?: StoredGroupAdmin[];
   challenges: Challenge[];
   dayScores: StoredDayScore[];
   dayLabels: StoredDayLabel[];
@@ -63,6 +70,14 @@ function sortChallenges(challenges: Challenge[]): Challenge[] {
 function createFakePrisma(seed: FakePrismaSeed) {
   const users = new Map(seed.users.map((user) => [user.id, { ...user }]));
   const groups = new Map(seed.groups.map((group) => [group.id, { ...group }]));
+  const groupAdmins = [
+    ...(seed.groupAdmins ??
+      seed.groups.map((group) => ({
+        groupId: group.id,
+        userId: group.adminUserId,
+        createdAt: FIXED_NOW,
+      }))),
+  ];
   const challenges = new Map(
     seed.challenges.map((challenge) => [challenge.id, { ...challenge }]),
   );
@@ -172,6 +187,19 @@ function createFakePrisma(seed: FakePrismaSeed) {
     group: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         groups.get(where.id) ?? null,
+    },
+    groupAdmin: {
+      findMany: async ({
+        where,
+      }: {
+        where: { groupId: string };
+        select?: { userId?: boolean };
+        orderBy?: unknown;
+      }) =>
+        groupAdmins
+          .filter((admin) => admin.groupId === where.groupId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+          .map((admin) => ({ userId: admin.userId })),
     },
     challenge: {
       findFirst: async ({
@@ -300,6 +328,7 @@ function baseSeed(overrides: Partial<FakePrismaSeed> = {}): FakePrismaSeed {
   return {
     users: [makeUser(USER_ID)],
     groups: [makeGroup(ADMIN_ID)],
+    groupAdmins: undefined,
     challenges: [makeChallenge()],
     dayScores: [],
     dayLabels: [],
@@ -500,6 +529,32 @@ describe('heatmap.service', () => {
       expect(adminResult.isGroupAdmin).toBe(true);
       expect(memberResult.isGroupAdmin).toBe(false);
     });
+
+    it('returns isGroupAdmin true for secondary admins', async () => {
+      const { prisma } = createFakePrisma(
+        baseSeed({
+          users: [makeUser(MEMBER_ID)],
+          groups: [makeGroup(ADMIN_ID)],
+          groupAdmins: [
+            {
+              groupId: GROUP_ID,
+              userId: ADMIN_ID,
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            },
+            {
+              groupId: GROUP_ID,
+              userId: MEMBER_ID,
+              createdAt: new Date('2026-01-02T00:00:00.000Z'),
+            },
+          ],
+          challenges: [makeChallenge({ userId: MEMBER_ID })],
+        }),
+      );
+
+      const result = await getHeatmap(prisma, MEMBER_ID);
+
+      expect(result.isGroupAdmin).toBe(true);
+    });
   });
 
   describe('setDayLabel', () => {
@@ -561,6 +616,38 @@ describe('heatmap.service', () => {
         dayNumber: 5,
         labelText: 'Core focus',
         setByUserId: ADMIN_ID,
+      });
+    });
+
+    it('lets a secondary admin set a day label', async () => {
+      const { prisma, dayLabelUpsert } = createFakePrisma(
+        baseSeed({
+          users: [makeUser(MEMBER_ID)],
+          groups: [makeGroup(ADMIN_ID)],
+          groupAdmins: [
+            {
+              groupId: GROUP_ID,
+              userId: ADMIN_ID,
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            },
+            {
+              groupId: GROUP_ID,
+              userId: MEMBER_ID,
+              createdAt: new Date('2026-01-02T00:00:00.000Z'),
+            },
+          ],
+          challenges: [makeChallenge({ userId: MEMBER_ID, lengthDays: 30 })],
+        }),
+      );
+
+      const label = await setDayLabel(prisma, MEMBER_ID, 5, 'Core focus');
+
+      expect(dayLabelUpsert).toHaveBeenCalledOnce();
+      expect(label).toMatchObject({
+        groupId: GROUP_ID,
+        dayNumber: 5,
+        labelText: 'Core focus',
+        setByUserId: MEMBER_ID,
       });
     });
 

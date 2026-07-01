@@ -5,6 +5,10 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { getUserLocalDate, isValidTimeZone } from '../utils/day-window';
+import {
+  getGroupAdminUserIds,
+  getReplacementAdminId,
+} from '../utils/group-admin';
 
 export type ProfileData = {
   id: string;
@@ -26,12 +30,30 @@ export async function getProfile(
 ): Promise<ProfileData> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { group: { select: { id: true, name: true, adminUserId: true } } },
+    include: {
+      group: {
+        select: {
+          id: true,
+          name: true,
+          adminUserId: true,
+          admins: {
+            select: { userId: true },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
+    },
   });
 
   if (!user) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
+
+  const adminUserIds = user.group
+    ? user.group.admins.length > 0
+      ? user.group.admins.map((admin) => admin.userId)
+      : [user.group.adminUserId]
+    : [];
 
   return {
     id: user.id,
@@ -44,7 +66,7 @@ export async function getProfile(
     whatsappOptIn: user.whatsappOptIn,
     groupId: user.groupId,
     groupName: user.group?.name ?? null,
-    isGroupAdmin: user.group?.adminUserId === userId,
+    isGroupAdmin: adminUserIds.includes(userId),
   };
 }
 
@@ -411,14 +433,40 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
     });
   }
 
-  if (user.group?.adminUserId === userId) {
+  const adminUserIds = await getGroupAdminUserIds(
+    prisma,
+    user.groupId,
+    user.group?.adminUserId,
+  );
+  const isAdmin = adminUserIds.includes(userId);
+  if (isAdmin && adminUserIds.length <= 1) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Transfer admin before leaving the group',
+      message: 'Promote another admin before leaving the group',
     });
   }
+  const replacementAdminId = isAdmin
+    ? (adminUserIds.find((adminId) => adminId !== userId) ??
+      (await getReplacementAdminId(prisma, user.groupId, userId)))
+    : null;
 
   await prisma.$transaction(async (tx) => {
+    if (isAdmin) {
+      await tx.groupAdmin.deleteMany({
+        where: {
+          groupId: user.groupId!,
+          userId,
+        },
+      });
+
+      if (replacementAdminId && user.group?.adminUserId === userId) {
+        await tx.group.update({
+          where: { id: user.groupId! },
+          data: { adminUserId: replacementAdminId },
+        });
+      }
+    }
+
     const activeChallenge = user.challenges[0];
     if (activeChallenge) {
       await tx.challenge.update({
