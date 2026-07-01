@@ -1,5 +1,10 @@
 import { computeDayLoggingStatus } from '../utils/day-completion';
 import {
+  currentDayFromDates,
+  fallbackScheduledEnd,
+  lengthDaysFromRange,
+} from '../utils/challenge-range';
+import {
   type ActivityLogInput,
   type DayScoreBreakdownEntry,
   type ScoredActivity,
@@ -8,11 +13,15 @@ import {
 
 export type EvaluateDayRolloverInput = {
   challenge: {
+    startDate?: Date;
+    endDate?: Date | null;
     currentDay: number;
     lengthDays: number;
     currentStreak: number;
     longestStreak: number;
   };
+  previousDay?: Date;
+  timezone?: string;
   scoredActivities: ScoredActivity[];
   personalActivities?: ScoredActivity[];
   previousDayLogs: ActivityLogInput[];
@@ -90,12 +99,37 @@ export function evaluateDayRollover(
         : false;
   const newStreak = dayCounted ? challenge.currentStreak + 1 : 0;
   const newLongestStreak = Math.max(challenge.longestStreak, newStreak);
-  const newDay = challenge.currentDay + 1;
-  const completed = newDay > challenge.lengthDays;
+  const timezone = input.timezone ?? 'UTC';
+  const endDate =
+    challenge.startDate && challenge.endDate !== undefined
+      ? fallbackScheduledEnd(
+          {
+            startDate: challenge.startDate,
+            endDate: challenge.endDate,
+            lengthDays: challenge.lengthDays,
+          },
+          timezone,
+        )
+      : null;
+  const lengthDays =
+    challenge.startDate && endDate
+      ? lengthDaysFromRange(challenge.startDate, endDate, timezone)
+      : challenge.lengthDays;
+  const dayNumber =
+    challenge.startDate && endDate && input.previousDay
+      ? currentDayFromDates(
+          challenge.startDate,
+          endDate,
+          timezone,
+          input.previousDay,
+        )
+      : challenge.currentDay;
+  const completed = dayNumber >= lengthDays;
+  const newDay = completed ? lengthDays + 1 : dayNumber + 1;
 
   return {
     dayScore: {
-      dayNumber: challenge.currentDay,
+      dayNumber,
       xpEarned: score.xpEarned,
       xpDeducted: score.xpDeducted,
       netXp: score.netXp,
@@ -108,7 +142,7 @@ export function evaluateDayRollover(
       },
     },
     challengeUpdate: {
-      currentDay: completed ? challenge.lengthDays + 1 : newDay,
+      currentDay: newDay,
       currentStreak: newStreak,
       longestStreak: newLongestStreak,
       totalXpIncrement: score.netXp,

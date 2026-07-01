@@ -423,7 +423,7 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
     if (activeChallenge) {
       await tx.challenge.update({
         where: { id: activeChallenge.id },
-        data: { isActive: false, endDate: new Date() },
+        data: { isActive: false, stoppedAt: new Date() },
       });
     }
 

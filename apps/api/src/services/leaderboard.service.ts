@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import { latestChallengeRelationArgs } from '../utils/challenge-query';
+import { deriveChallengeProgress } from '../utils/challenge-range';
 import { isInterimDayCompleted } from '../utils/day-completion';
 import {
   formatLocalDateKey,
@@ -129,6 +130,12 @@ export async function getLeaderboard(
     });
   }
 
+  const group = await prisma.group.findUnique({
+    where: { id: user.groupId },
+    select: { challengeTimezone: true },
+  });
+  const challengeTimezone = group?.challengeTimezone ?? null;
+
   const members = await prisma.user.findMany({
     where: { groupId: user.groupId },
     select: {
@@ -149,7 +156,12 @@ export async function getLeaderboard(
   const entries = await Promise.all(
     members.map(async (member) => {
       const challenge = member.challenges[0] ?? null;
-      const currentDay = challenge?.currentDay ?? 0;
+      const currentDay = challenge
+        ? deriveChallengeProgress(
+            challenge,
+            challengeTimezone ?? member.timezone,
+          ).currentDay
+        : 0;
       const streak = challenge
         ? await getLiveStreak(prisma, {
             challengeId: challenge.id,
@@ -177,7 +189,10 @@ export async function getLeaderboard(
         name: member.name,
         avatarUrl: member.avatarUrl,
         currentDay,
-        status: getMemberStatus(challenge),
+        status: getMemberStatus(
+          challenge,
+          challengeTimezone ?? member.timezone,
+        ),
         streak,
         xp,
         successRate,

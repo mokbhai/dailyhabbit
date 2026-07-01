@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { authRouter } from '../src/trpc/routers/auth.router';
-import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../src/utils/challenge-query';
+import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
 
 const USER_ID = 'user-1';
@@ -25,7 +25,12 @@ function createAuthContext(
     users: Map<string, StoredUser>;
     usersByPhone: Map<string, StoredUser>;
     usersByEmail: Map<string, StoredUser>;
-    challenges: Array<{ userId: string; lengthDays: number }>;
+    challenges: Array<{
+      userId: string;
+      startDate: Date;
+      endDate: Date;
+      lengthDays: number;
+    }>;
   },
   authOverrides: Partial<Context['authService']> = {},
 ): Context {
@@ -90,7 +95,12 @@ function createAuthContext(
             async ({
               data,
             }: {
-              data: { userId: string; lengthDays: number };
+              data: {
+                userId: string;
+                startDate: Date;
+                endDate: Date;
+                lengthDays: number;
+              };
             }) => {
               stores.challenges.push(data);
               return data;
@@ -143,8 +153,9 @@ describe('authRouter register/login', () => {
     expect(result.user.email).toBeNull();
     expect(stores.challenges).toHaveLength(1);
     expect(stores.challenges[0]?.lengthDays).toBe(
-      DEFAULT_CHALLENGE_LENGTH_DAYS,
+      DEFAULT_CHALLENGE_WINDOW_DAYS,
     );
+    expect(stores.challenges[0]?.endDate).toBeInstanceOf(Date);
     expect(ctx.authService.hashPassword).toHaveBeenCalledWith(PASSWORD);
   });
 

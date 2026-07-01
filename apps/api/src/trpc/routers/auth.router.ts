@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { normalizePhone, PhoneValidationError } from '../../auth/phone';
-import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../../utils/challenge-query';
+import {
+  buildDefaultChallengeRange,
+  deriveChallengeProgress,
+} from '../../utils/challenge-range';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
 
 const userSelect = {
@@ -71,6 +74,7 @@ export const authRouter = router({
 
       const passwordHash = await ctx.authService.hashPassword(input.password);
       const timezone = ctx.authService.detectTimezone(ctx.req);
+      const range = buildDefaultChallengeRange(timezone);
 
       const user = await ctx.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
@@ -87,10 +91,11 @@ export const authRouter = router({
         await tx.challenge.create({
           data: {
             userId: created.id,
-            startDate: new Date(),
-            currentDay: 1,
+            startDate: range.startDate,
+            endDate: range.endDate,
+            currentDay: range.currentDay,
             isActive: true,
-            lengthDays: DEFAULT_CHALLENGE_LENGTH_DAYS,
+            lengthDays: range.lengthDays,
           },
         });
 
@@ -186,6 +191,8 @@ export const authRouter = router({
         id: true,
         currentDay: true,
         startDate: true,
+        endDate: true,
+        stoppedAt: true,
         isActive: true,
         longestStreak: true,
         currentStreak: true,
@@ -194,6 +201,22 @@ export const authRouter = router({
       },
     });
 
-    return { user, attempt: challenge };
+    const group = user.groupId
+      ? await ctx.prisma.group.findUnique({
+          where: { id: user.groupId },
+          select: { challengeTimezone: true },
+        })
+      : null;
+    const attempt = challenge
+      ? {
+          ...challenge,
+          ...deriveChallengeProgress(
+            challenge,
+            group?.challengeTimezone ?? user.timezone,
+          ),
+        }
+      : null;
+
+    return { user, attempt };
   }),
 });

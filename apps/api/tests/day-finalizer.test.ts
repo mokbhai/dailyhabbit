@@ -661,7 +661,7 @@ function createCronFakePrisma(
 
 describe('DayEvaluatorService — cron guards', () => {
   const timezone = 'America/New_York';
-  const startDate = new Date('2026-01-01T12:00:00.000Z');
+  const startDate = new Date('2026-06-10T04:00:00.000Z');
   let previousDay: Date;
 
   beforeEach(() => {
@@ -992,6 +992,70 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(challenge?.currentDay).toBe(6);
     expect(challenge?.currentStreak).toBe(2);
     expect(challenge?.totalXp).toBe(200);
+  });
+
+  it('finalizes the scheduled end day when the cron runs late', async () => {
+    const challengeEndDay = addLocalDays(startDate, 2, timezone);
+    const { prisma, transactionOps, challenges, dayScores } =
+      createCronFakePrisma({
+        users: [
+          {
+            id: 'user-1',
+            phone: null,
+            email: 'a@b.com',
+            passwordHash: 'x',
+            name: 'User',
+            timezone,
+            groupId: 'group-1',
+            createdAt: new Date(),
+            avatarUrl: null,
+            reminderTime: null,
+          },
+        ],
+        challenges: [
+          {
+            id: 'ch-1',
+            userId: 'user-1',
+            groupId: 'group-1',
+            startDate,
+            endDate: challengeEndDay,
+            lengthDays: 3,
+            currentDay: 3,
+            isActive: true,
+            totalXp: 0,
+            currentStreak: 1,
+            longestStreak: 1,
+          },
+        ],
+        activities: [makeActivity({ id: 'act-1', groupId: 'group-1' })],
+        activityLogs: [
+          {
+            id: 'log-1',
+            challengeId: 'ch-1',
+            userId: 'user-1',
+            activityId: 'act-1',
+            date: challengeEndDay,
+            value: null,
+            tier: null,
+            subPoints: null,
+            state: 'DONE',
+            xpAwarded: 200,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        ],
+      });
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+
+    expect(transactionOps).toHaveLength(2);
+    const challenge = challenges.get('ch-1');
+    const score = dayScores.get(dayScoreKey('ch-1', challengeEndDay));
+    expect(challenge?.isActive).toBe(false);
+    expect(challenge?.currentDay).toBe(4);
+    expect(score?.dayNumber).toBe(3);
+    expect(score?.finalized).toBe(true);
   });
 
   // Exercises the pre-transaction findFirst guard (day-evaluator.service.ts:86-95).

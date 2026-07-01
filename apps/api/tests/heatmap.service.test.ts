@@ -36,6 +36,7 @@ type StoredGroup = {
   name: string;
   inviteToken: string;
   adminUserId: string;
+  challengeTimezone?: string | null;
 };
 
 type FakePrismaSeed = {
@@ -180,7 +181,7 @@ function createFakePrisma(seed: FakePrismaSeed) {
       }: {
         where: { userId?: string };
         orderBy?: typeof challengeDisplayOrderBy;
-        select?: { lengthDays?: boolean };
+        select?: Partial<Record<keyof Challenge, boolean>>;
       }) => {
         let matches = [...challenges.values()].filter((challenge) => {
           if (where.userId !== undefined && challenge.userId !== where.userId) {
@@ -195,8 +196,13 @@ function createFakePrisma(seed: FakePrismaSeed) {
         if (!match) {
           return null;
         }
-        if (select?.lengthDays) {
-          return { lengthDays: match.lengthDays };
+        if (select) {
+          return Object.fromEntries(
+            Object.keys(select).map((key) => [
+              key,
+              match[key as keyof Challenge],
+            ]),
+          );
         }
         return match;
       },
@@ -238,14 +244,32 @@ function makeGroup(adminUserId: string): StoredGroup {
 }
 
 function makeChallenge(overrides: Partial<Challenge> = {}): Challenge {
+  const currentDay = overrides.currentDay ?? 3;
+  const lengthDays = overrides.lengthDays ?? 7;
+  const startDate =
+    overrides.startDate ??
+    new Date(
+      Date.UTC(2026, 5, 15 - Math.max(0, Math.min(currentDay, lengthDays) - 1)),
+    );
+  const endDate =
+    overrides.endDate ??
+    new Date(
+      Date.UTC(
+        startDate.getUTCFullYear(),
+        startDate.getUTCMonth(),
+        startDate.getUTCDate() + lengthDays - 1,
+      ),
+    );
+
   return {
     id: CHALLENGE_ID,
     userId: USER_ID,
     groupId: GROUP_ID,
-    startDate: new Date('2026-06-01'),
-    endDate: null,
-    lengthDays: 7,
-    currentDay: 3,
+    startDate,
+    endDate,
+    stoppedAt: null,
+    lengthDays,
+    currentDay,
     isActive: true,
     totalXp: 0,
     currentStreak: 0,
@@ -501,7 +525,7 @@ describe('heatmap.service', () => {
         baseSeed({
           users: [makeUser(ADMIN_ID)],
           groups: [makeGroup(ADMIN_ID)],
-          challenges: [makeChallenge({ userId: ADMIN_ID, lengthDays: 75 })],
+          challenges: [makeChallenge({ userId: ADMIN_ID, lengthDays: 31 })],
         }),
       );
 
@@ -509,14 +533,14 @@ describe('heatmap.service', () => {
         setDayLabel(prisma, ADMIN_ID, 0, 'Invalid'),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
-        message: 'Day must be 1–75',
+        message: 'Day must be 1–31',
       } satisfies Partial<TRPCError>);
 
       await expect(
-        setDayLabel(prisma, ADMIN_ID, 76, 'Invalid'),
+        setDayLabel(prisma, ADMIN_ID, 32, 'Invalid'),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
-        message: 'Day must be 1–75',
+        message: 'Day must be 1–31',
       } satisfies Partial<TRPCError>);
     });
 

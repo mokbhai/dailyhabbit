@@ -44,6 +44,7 @@ type FakePrismaSeed = {
   dayScores: StoredDayScore[];
   activities?: Activity[];
   activityLogs?: ActivityLog[];
+  challengeTimezone?: string | null;
 };
 
 function sortChallenges(challenges: Challenge[]): Challenge[] {
@@ -111,6 +112,7 @@ function createFakePrisma(seed: FakePrismaSeed) {
   const activityLogs = [
     ...(seed.activityLogs ?? []).map((log) => ({ ...log })),
   ];
+  const challengeTimezone = seed.challengeTimezone ?? null;
 
   function challengesForUser(userId: string): Challenge[] {
     return sortChallenges(
@@ -195,6 +197,19 @@ function createFakePrisma(seed: FakePrismaSeed) {
 
           return row;
         });
+      },
+    },
+    group: {
+      findUnique: async ({
+        where,
+        select,
+      }: {
+        where: { id: string };
+        select?: { challengeTimezone?: boolean };
+      }) => {
+        if (where.id !== GROUP_ID) return null;
+        if (select?.challengeTimezone) return { challengeTimezone };
+        return { id: GROUP_ID, challengeTimezone };
       },
     },
     dayScore: {
@@ -332,7 +347,7 @@ function makeChallenge(
     groupId: GROUP_ID,
     startDate: new Date('2026-06-01T00:00:00.000Z'),
     endDate: null,
-    lengthDays: 75,
+    lengthDays: 30,
     currentDay: 15,
     isActive: true,
     totalXp: 0,

@@ -7,6 +7,7 @@ import {
 } from '../services/activities.service';
 import { evaluateDayRollover } from '../services/day-finalizer';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
+import { fallbackScheduledEnd } from '../utils/challenge-range';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class DayEvaluatorService {
         challenges: { some: { isActive: true } },
       },
       include: {
+        group: { select: { challengeTimezone: true } },
         challenges: activeChallengeRelationArgs(),
       },
     });
@@ -32,6 +34,7 @@ export class DayEvaluatorService {
         await this.evaluateUserDay(
           user.id,
           user.timezone,
+          user.group?.challengeTimezone ?? user.timezone,
           user.groupId,
           challenge,
         );
@@ -44,10 +47,12 @@ export class DayEvaluatorService {
   private async evaluateUserDay(
     userId: string,
     timezone: string,
+    challengeTimezone: string,
     groupId: string | null,
     challenge: {
       id: string;
       startDate: Date;
+      endDate: Date | null;
       currentDay: number;
       lengthDays: number;
       longestStreak: number;
@@ -75,22 +80,40 @@ export class DayEvaluatorService {
       return;
     }
 
-    const localToday = getUserLocalDate(timezone);
-    const previousDay = addLocalDays(localToday, -1, timezone);
-    const challengeStartDay = getUserLocalDate(timezone, challenge.startDate);
+    const localToday = getUserLocalDate(challengeTimezone);
+    const previousDay = addLocalDays(localToday, -1, challengeTimezone);
+    const challengeStartDay = getUserLocalDate(
+      challengeTimezone,
+      challenge.startDate,
+    );
+    const challengeEndDay = getUserLocalDate(
+      challengeTimezone,
+      fallbackScheduledEnd(challenge, challengeTimezone),
+    );
 
     if (previousDay.getTime() < challengeStartDay.getTime()) {
       return;
     }
 
+    const evaluationDay =
+      previousDay.getTime() > challengeEndDay.getTime()
+        ? challengeEndDay
+        : previousDay;
+
     const existingScore = await this.prisma.dayScore.findFirst({
       where: {
         challengeId: challenge.id,
-        date: previousDay,
+        date: evaluationDay,
       },
     });
 
     if (existingScore?.finalized) {
+      if (previousDay.getTime() > challengeEndDay.getTime()) {
+        await this.prisma.challenge.update({
+          where: { id: challenge.id },
+          data: { isActive: false },
+        });
+      }
       return;
     }
 
@@ -98,7 +121,7 @@ export class DayEvaluatorService {
       where: {
         challengeId: challenge.id,
         userId,
-        date: previousDay,
+        date: evaluationDay,
       },
     });
 
@@ -106,9 +129,13 @@ export class DayEvaluatorService {
       challenge: {
         currentDay: challenge.currentDay,
         lengthDays: challenge.lengthDays,
+        startDate: challenge.startDate,
+        endDate: challenge.endDate,
         currentStreak: challenge.currentStreak,
         longestStreak: challenge.longestStreak,
       },
+      previousDay: evaluationDay,
+      timezone: challengeTimezone,
       scoredActivities: scoredActivities.map(mapActivityToScored),
       personalActivities: personalActivities.map(mapActivityToScored),
       previousDayLogs: activityLogs.map(mapLogToInput),
@@ -122,7 +149,7 @@ export class DayEvaluatorService {
         where: {
           challengeId_date: {
             challengeId: challenge.id,
-            date: previousDay,
+            date: evaluationDay,
           },
         },
         select: { finalized: true },
@@ -135,13 +162,13 @@ export class DayEvaluatorService {
         where: {
           challengeId_date: {
             challengeId: challenge.id,
-            date: previousDay,
+            date: evaluationDay,
           },
         },
         create: {
           challengeId: challenge.id,
           userId,
-          date: previousDay,
+          date: evaluationDay,
           dayNumber: result.dayScore.dayNumber,
           netXp: result.dayScore.netXp,
           xpEarned: result.dayScore.xpEarned,
@@ -167,9 +194,7 @@ export class DayEvaluatorService {
           currentStreak: result.challengeUpdate.currentStreak,
           longestStreak: result.challengeUpdate.longestStreak,
           totalXp: { increment: result.challengeUpdate.totalXpIncrement },
-          ...(result.challengeUpdate.completed
-            ? { isActive: false, endDate: new Date() }
-            : {}),
+          ...(result.challengeUpdate.completed ? { isActive: false } : {}),
         },
       });
     });

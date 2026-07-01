@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
+import { latestChallengeRelationArgs } from '../utils/challenge-query';
 import {
-  DEFAULT_CHALLENGE_LENGTH_DAYS,
-  latestChallengeRelationArgs,
-} from '../utils/challenge-query';
+  DEFAULT_CHALLENGE_WINDOW_DAYS,
+  deriveChallengeProgress,
+} from '../utils/challenge-range';
 import {
   isInterimDayCompleted,
   isInterimDayFailed,
@@ -62,9 +63,13 @@ export async function getHeatmap(
     (challenge?.dayScores ?? []).map((score) => [score.dayNumber, score]),
   );
 
-  const currentDay = challenge?.currentDay ?? 1;
+  const timezone = user.group?.challengeTimezone ?? user.timezone;
+  const progress = challenge
+    ? deriveChallengeProgress(challenge, timezone)
+    : null;
+  const currentDay = progress?.currentDay ?? 0;
   const isActive = challenge?.isActive ?? false;
-  const lengthDays = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
+  const lengthDays = progress?.lengthDays ?? DEFAULT_CHALLENGE_WINDOW_DAYS;
 
   const cells: HeatmapCell[] = [];
 
@@ -126,9 +131,19 @@ export async function setDayLabel(
   const challenge = await prisma.challenge.findFirst({
     where: { userId },
     orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
-    select: { lengthDays: true },
+    select: {
+      startDate: true,
+      endDate: true,
+      lengthDays: true,
+      currentDay: true,
+    },
   });
-  const maxDay = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
+  const maxDay = challenge
+    ? deriveChallengeProgress(
+        challenge,
+        group.challengeTimezone ?? user.timezone,
+      ).lengthDays
+    : DEFAULT_CHALLENGE_WINDOW_DAYS;
 
   if (dayNumber < 1 || dayNumber > maxDay) {
     throw new TRPCError({
