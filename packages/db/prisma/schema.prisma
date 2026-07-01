@@ -54,15 +54,18 @@ model ReminderLog {
 }
 
 model Group {
-  id          String     @id @default(cuid())
-  name        String
-  inviteToken String     @unique
-  adminUserId String
-  admin       User       @relation("GroupAdmin", fields: [adminUserId], references: [id])
-  members     User[]
-  dayLabels   DayLabel[]
-  activities  Activity[]
-  createdAt   DateTime   @default(now())
+  id                 String     @id @default(cuid())
+  name               String
+  inviteToken        String     @unique
+  adminUserId        String
+  admin              User       @relation("GroupAdmin", fields: [adminUserId], references: [id])
+  members            User[]
+  dayLabels          DayLabel[]
+  activities         Activity[]
+  challengeStartDate DateTime?
+  challengeEndDate   DateTime?
+  challengeTimezone  String?
+  createdAt          DateTime   @default(now())
 }
 
 model Challenge {
@@ -71,9 +74,10 @@ model Challenge {
   user          User          @relation(fields: [userId], references: [id])
   groupId       String?
   startDate     DateTime
+  // Scheduled inclusive end date. Early stops use stoppedAt.
   endDate       DateTime?
-  // Legacy fallback only — the API always sets this explicitly to
-  // DEFAULT_CHALLENGE_LENGTH_DAYS on create. See utils/challenge-query.ts.
+  stoppedAt     DateTime?
+  // Denormalized from startDate..endDate for fast reads and legacy clients.
   lengthDays    Int           @default(30)
   currentDay    Int           @default(1)
   isActive      Boolean       @default(true)

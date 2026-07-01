@@ -18,14 +18,18 @@ function makeChallenge(
     isActive: boolean;
     currentDay: number;
     lengthDays: number;
+    startDate: Date;
+    endDate: Date | null;
+    stoppedAt: Date | null;
   }> = {},
 ) {
   return {
     id: 'challenge-1',
     userId: 'user-1',
     groupId: null,
-    startDate: new Date(),
-    endDate: null,
+    startDate: new Date('2026-06-01T00:00:00.000Z'),
+    endDate: new Date('2026-06-30T00:00:00.000Z'),
+    stoppedAt: null,
     lengthDays: 30,
     currentDay: 1,
     isActive: true,
@@ -39,13 +43,21 @@ function makeChallenge(
 describe('getMemberStatus', () => {
   it('returns ACTIVE for an in-progress challenge', () => {
     expect(
-      getMemberStatus(makeChallenge({ currentDay: 5, lengthDays: 30 })),
+      getMemberStatus(
+        makeChallenge({ currentDay: 5, lengthDays: 30 }),
+        'UTC',
+        new Date('2026-06-05T12:00:00.000Z'),
+      ),
     ).toBe('ACTIVE');
   });
 
-  it('returns COMPLETED when currentDay exceeds lengthDays', () => {
+  it('returns COMPLETED after the scheduled end date', () => {
     expect(
-      getMemberStatus(makeChallenge({ currentDay: 31, lengthDays: 30 })),
+      getMemberStatus(
+        makeChallenge({ currentDay: 30, lengthDays: 30 }),
+        'UTC',
+        new Date('2026-07-01T00:00:00.000Z'),
+      ),
     ).toBe('COMPLETED');
   });
 

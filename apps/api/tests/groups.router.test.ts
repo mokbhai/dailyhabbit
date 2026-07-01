@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { seedGroupActivities } from '@workspace-starter/db';
 import { groupsRouter } from '../src/trpc/routers/groups.router';
-import { DEFAULT_CHALLENGE_LENGTH_DAYS } from '../src/utils/challenge-query';
+import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
 
 vi.mock('@workspace-starter/db', async (importOriginal) => ({
@@ -23,6 +23,7 @@ type StoredUser = {
   phone: string | null;
   email: string | null;
   groupId: string | null;
+  timezone: string;
 };
 
 type StoredGroup = {
@@ -30,6 +31,9 @@ type StoredGroup = {
   name: string;
   inviteToken: string;
   adminUserId: string;
+  challengeStartDate: Date | null;
+  challengeEndDate: Date | null;
+  challengeTimezone: string | null;
 };
 
 type StoredChallenge = {
@@ -41,6 +45,7 @@ type StoredChallenge = {
   currentDay: number;
   lengthDays: number;
   endDate: Date | null;
+  stoppedAt: Date | null;
 };
 
 type GroupsStores = {
@@ -58,6 +63,7 @@ function createGroupsStores(): GroupsStores {
     phone: null,
     email: 'caller@example.com',
     groupId: null,
+    timezone: 'UTC',
   };
 
   return {
@@ -79,8 +85,25 @@ function createGroupsContext(
   const prisma = {
     user: {
       findUnique: vi.fn(
-        async ({ where }: { where: { id: string } }) =>
-          stores.users.get(where.id) ?? null,
+        async ({
+          where,
+          include,
+        }: {
+          where: { id: string };
+          include?: { group?: boolean };
+        }) => {
+          const user = stores.users.get(where.id) ?? null;
+          if (!user) return null;
+          if (include?.group) {
+            return {
+              ...user,
+              group: user.groupId
+                ? (stores.groups.get(user.groupId) ?? null)
+                : null,
+            };
+          }
+          return user;
+        },
       ),
       findFirst: vi.fn(
         async ({
@@ -108,6 +131,32 @@ function createGroupsContext(
           }
 
           return user;
+        },
+      ),
+      findMany: vi.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: { groupId: string };
+          select?: unknown;
+        }) => {
+          void select;
+          return [...stores.users.values()]
+            .filter((user) => user.groupId === where.groupId)
+            .map((user) => {
+              const activeChallenges = [...stores.challenges.values()]
+                .filter((challenge) => {
+                  return challenge.userId === user.id && challenge.isActive;
+                })
+                .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+              return {
+                id: user.id,
+                challenges: activeChallenges.slice(0, 1).map((challenge) => ({
+                  id: challenge.id,
+                })),
+              };
+            });
         },
       ),
       update: vi.fn(
@@ -146,6 +195,9 @@ function createGroupsContext(
             name: string;
             inviteToken: string;
             adminUserId: string;
+            challengeStartDate?: Date;
+            challengeEndDate?: Date;
+            challengeTimezone?: string;
           };
         }) => {
           groupIdCounter += 1;
@@ -154,6 +206,9 @@ function createGroupsContext(
             name: data.name,
             inviteToken: data.inviteToken,
             adminUserId: data.adminUserId,
+            challengeStartDate: data.challengeStartDate ?? null,
+            challengeEndDate: data.challengeEndDate ?? null,
+            challengeTimezone: data.challengeTimezone ?? null,
           };
           stores.groups.set(group.id, group);
           stores.groupsByToken.set(group.inviteToken, group);
@@ -166,7 +221,7 @@ function createGroupsContext(
           data,
         }: {
           where: { id: string };
-          data: { adminUserId?: string };
+          data: Partial<StoredGroup>;
         }) => {
           const group = stores.groups.get(where.id);
           if (!group) throw new Error('Group not found');
@@ -200,21 +255,25 @@ function createGroupsContext(
             userId: string;
             groupId: string;
             startDate: Date;
+            endDate: Date;
             currentDay: number;
             isActive: boolean;
             lengthDays: number;
           };
         }) => {
-          challengeIdCounter += 1;
+          do {
+            challengeIdCounter += 1;
+          } while (stores.challenges.has(`challenge-${challengeIdCounter}`));
           const challenge: StoredChallenge = {
             id: `challenge-${challengeIdCounter}`,
             userId: data.userId,
             groupId: data.groupId,
             startDate: data.startDate,
+            endDate: data.endDate,
             currentDay: data.currentDay,
             isActive: data.isActive,
             lengthDays: data.lengthDays,
-            endDate: null,
+            stoppedAt: null,
           };
           stores.challenges.set(challenge.id, challenge);
           return challenge;
@@ -230,6 +289,10 @@ function createGroupsContext(
             groupId?: string;
             isActive?: boolean;
             endDate?: Date;
+            startDate?: Date;
+            currentDay?: number;
+            lengthDays?: number;
+            stoppedAt?: Date | null;
           };
         }) => {
           const challenge = stores.challenges.get(where.id);
@@ -237,6 +300,29 @@ function createGroupsContext(
           const updated = { ...challenge, ...data };
           stores.challenges.set(where.id, updated);
           return updated;
+        },
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { userId?: string; isActive?: boolean };
+          data: Partial<StoredChallenge>;
+        }) => {
+          let count = 0;
+          for (const [id, challenge] of stores.challenges) {
+            if (where.userId && challenge.userId !== where.userId) continue;
+            if (
+              where.isActive !== undefined &&
+              challenge.isActive !== where.isActive
+            ) {
+              continue;
+            }
+            stores.challenges.set(id, { ...challenge, ...data });
+            count += 1;
+          }
+          return { count };
         },
       ),
     },
@@ -277,9 +363,20 @@ function seedGroup(
     name = 'Test Group',
     inviteToken = INVITE_TOKEN,
     adminUserId = CALLER_ID,
+    challengeStartDate = null,
+    challengeEndDate = null,
+    challengeTimezone = null,
   }: Partial<StoredGroup> = {},
 ): StoredGroup {
-  const group: StoredGroup = { id, name, inviteToken, adminUserId };
+  const group: StoredGroup = {
+    id,
+    name,
+    inviteToken,
+    adminUserId,
+    challengeStartDate,
+    challengeEndDate,
+    challengeTimezone,
+  };
   stores.groups.set(id, group);
   stores.groupsByToken.set(inviteToken, group);
   return group;
@@ -299,6 +396,7 @@ function seedMember(
     phone: null,
     email: `${id}@example.com`,
     groupId,
+    timezone: 'UTC',
   };
   stores.users.set(id, member);
   return member;
@@ -319,8 +417,9 @@ function seedActiveChallenge(
     isActive: true,
     startDate: new Date('2026-06-01T00:00:00.000Z'),
     currentDay: 1,
-    lengthDays: DEFAULT_CHALLENGE_LENGTH_DAYS,
-    endDate: null,
+    lengthDays: DEFAULT_CHALLENGE_WINDOW_DAYS,
+    endDate: new Date('2026-06-30T00:00:00.000Z'),
+    stoppedAt: null,
   };
   stores.challenges.set(id, challenge);
   return challenge;
@@ -383,7 +482,8 @@ describe('groupsRouter join', () => {
       groupId: GROUP_ID,
       isActive: true,
       currentDay: 1,
-      lengthDays: DEFAULT_CHALLENGE_LENGTH_DAYS,
+      lengthDays: DEFAULT_CHALLENGE_WINDOW_DAYS,
+      endDate: expect.any(Date),
     });
   });
 
@@ -445,6 +545,86 @@ describe('groupsRouter join', () => {
     await caller.join({ token: INVITE_TOKEN });
 
     expect(seedGroupActivities).not.toHaveBeenCalled();
+  });
+});
+
+describe('groupsRouter setChallengeRange', () => {
+  it('lets an admin set a custom range and syncs active member challenges', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    seedActiveChallenge(stores, { userId: CALLER_ID, groupId: GROUP_ID });
+    seedActiveChallenge(stores, {
+      id: 'challenge-member',
+      userId: MEMBER_ID,
+      groupId: GROUP_ID,
+    });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    const result = await caller.setChallengeRange({
+      startDate: new Date('2026-07-01T12:00:00.000Z'),
+      endDate: new Date('2026-07-31T12:00:00.000Z'),
+      timezone: 'UTC',
+    });
+
+    expect(result.lengthDays).toBe(31);
+    expect(result.currentDay).toBe(0);
+    expect(stores.groups.get(GROUP_ID)).toMatchObject({
+      challengeTimezone: 'UTC',
+      challengeStartDate: new Date('2026-07-01T00:00:00.000Z'),
+      challengeEndDate: new Date('2026-07-31T00:00:00.000Z'),
+    });
+    for (const challenge of stores.challenges.values()) {
+      expect(challenge).toMatchObject({
+        startDate: new Date('2026-07-01T00:00:00.000Z'),
+        endDate: new Date('2026-07-31T00:00:00.000Z'),
+        lengthDays: 31,
+        currentDay: 0,
+        stoppedAt: null,
+      });
+    }
+  });
+
+  it('sets this week and creates missing member challenges', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    seedActiveChallenge(stores, { userId: CALLER_ID, groupId: GROUP_ID });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    const result = await caller.setChallengeThisWeek();
+
+    expect(result.lengthDays).toBe(7);
+    expect(result.currentDay).toBe(1);
+    expect(stores.challenges.size).toBe(2);
+    for (const challenge of stores.challenges.values()) {
+      expect(challenge).toMatchObject({
+        groupId: GROUP_ID,
+        startDate: new Date('2026-06-15T00:00:00.000Z'),
+        endDate: new Date('2026-06-21T00:00:00.000Z'),
+        lengthDays: 7,
+        currentDay: 1,
+      });
+    }
+  });
+
+  it('rejects range updates from non-admin members', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: MEMBER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    await expect(
+      caller.setChallengeRange({
+        startDate: new Date('2026-07-01T00:00:00.000Z'),
+        endDate: new Date('2026-07-07T00:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Admin only',
+    } satisfies Partial<TRPCError>);
   });
 });
 

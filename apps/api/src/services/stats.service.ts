@@ -1,10 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import type { Activity } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
+import { challengeDisplayOrderBy } from '../utils/challenge-query';
 import {
-  challengeDisplayOrderBy,
-  DEFAULT_CHALLENGE_LENGTH_DAYS,
-} from '../utils/challenge-query';
+  DEFAULT_CHALLENGE_WINDOW_DAYS,
+  deriveChallengeProgress,
+} from '../utils/challenge-range';
 import { isInterimDayCompleted } from '../utils/day-completion';
 import {
   addLocalDays,
@@ -39,7 +40,10 @@ export async function getDashboardStats(
   prisma: PrismaService,
   userId: string,
 ): Promise<DashboardStats> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { group: { select: { challengeTimezone: true } } },
+  });
   if (!user) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
@@ -87,21 +91,30 @@ export async function getDashboardStats(
       })
     : 0;
 
-  const lengthDays = challenge?.lengthDays ?? DEFAULT_CHALLENGE_LENGTH_DAYS;
-  const daysRemaining = challenge
-    ? Math.max(0, lengthDays - (challenge.currentDay - 1))
-    : lengthDays;
+  const progress = challenge
+    ? deriveChallengeProgress(
+        challenge,
+        user.group?.challengeTimezone ?? user.timezone,
+      )
+    : null;
+  const lengthDays = progress?.lengthDays ?? DEFAULT_CHALLENGE_WINDOW_DAYS;
+  const currentDay = progress?.currentDay ?? 0;
+  const daysRemaining =
+    progress && currentDay >= 1
+      ? Math.max(0, lengthDays - (currentDay - 1))
+      : lengthDays;
   const estimatedFinishDate =
     challenge && daysRemaining > 0
-      ? addLocalDays(todayDate, daysRemaining, user.timezone)
-      : challenge && challenge.currentDay > lengthDays
+      ? (progress?.endDate ??
+        addLocalDays(todayDate, daysRemaining, user.timezone))
+      : challenge && currentDay > lengthDays
         ? todayDate
         : null;
 
   return {
     totalXp,
     todayNetXp,
-    currentDay: challenge?.currentDay ?? 1,
+    currentDay,
     lengthDays,
     startDate: challenge?.startDate ?? null,
     todayDate,

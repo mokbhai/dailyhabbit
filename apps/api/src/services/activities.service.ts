@@ -9,6 +9,7 @@ import {
 import type { PrismaService } from '../prisma/prisma.service';
 
 type PrismaClientLike = PrismaService | Prisma.TransactionClient;
+import { deriveChallengeProgress } from '../utils/challenge-range';
 import { computeDayLoggingStatus } from '../utils/day-completion';
 import { getUserLocalDate, isBeforeMidnight } from '../utils/day-window';
 import {
@@ -611,25 +612,48 @@ export class ActivitiesService {
     prisma: PrismaService,
     userId: string,
   ): Promise<GetTodayResult> {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { group: { select: { challengeTimezone: true } } },
+    });
     if (!user) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
 
     const todayDate = getUserLocalDate(user.timezone);
-    const canEdit = isBeforeMidnight(user.timezone);
+    const canEditBeforeDeadline = isBeforeMidnight(user.timezone);
 
     const challenge = await findActiveChallenge(prisma, userId);
     if (!challenge) {
       return {
         currentDay: 1,
         date: todayDate,
-        canEdit,
+        canEdit: canEditBeforeDeadline,
         dayTotals: emptyDayTotals(),
         scoredActivities: [],
         personalActivities: [],
       };
     }
+
+    const challengeTimezone = user.group?.challengeTimezone ?? user.timezone;
+    const progress = deriveChallengeProgress(challenge, challengeTimezone);
+    const isWithinRange =
+      progress.currentDay >= 1 && progress.currentDay <= progress.lengthDays;
+    if (!isWithinRange) {
+      return {
+        currentDay: progress.currentDay,
+        date: todayDate,
+        canEdit: false,
+        dayTotals: emptyDayTotals(),
+        scoredActivities: [],
+        personalActivities: [],
+      };
+    }
+    const runtimeChallenge = {
+      ...challenge,
+      currentDay: progress.currentDay,
+      lengthDays: progress.lengthDays,
+    };
 
     const activities = await loadUserActivities(prisma, {
       userId,
@@ -660,7 +684,7 @@ export class ActivitiesService {
       };
     } else if (activities.length > 0) {
       dayTotals = await recomputeLiveDayScore(prisma, {
-        challenge,
+        challenge: runtimeChallenge,
         userId,
         timezone: user.timezone,
         groupId: user.groupId,
@@ -685,9 +709,9 @@ export class ActivitiesService {
     }
 
     return {
-      currentDay: challenge.currentDay,
+      currentDay: progress.currentDay,
       date: todayDate,
-      canEdit,
+      canEdit: canEditBeforeDeadline && isWithinRange,
       dayTotals,
       scoredActivities,
       personalActivities,
@@ -909,7 +933,10 @@ export class ActivitiesService {
     userId: string,
     activityId: string,
   ) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { group: { select: { challengeTimezone: true } } },
+    });
     if (!user) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
@@ -922,6 +949,15 @@ export class ActivitiesService {
       });
     }
 
+    const challengeTimezone = user.group?.challengeTimezone ?? user.timezone;
+    const progress = deriveChallengeProgress(challenge, challengeTimezone);
+    if (progress.currentDay < 1 || progress.currentDay > progress.lengthDays) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Challenge is outside its active date range',
+      });
+    }
+
     const activity = await prisma.activity.findUnique({
       where: { id: activityId },
     });
@@ -931,7 +967,15 @@ export class ActivitiesService {
 
     await assertActivityAccess(prisma, activity, userId, user.groupId);
 
-    return { user, challenge, activity };
+    return {
+      user,
+      challenge: {
+        ...challenge,
+        currentDay: progress.currentDay,
+        lengthDays: progress.lengthDays,
+      },
+      activity,
+    };
   }
 
   private async upsertActivityLog(
