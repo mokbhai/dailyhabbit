@@ -5,6 +5,7 @@ import type {
   UpdateActivityInput,
 } from '@workspace-starter/types';
 import { trpc } from '../../lib/trpc';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { ActivityForm } from './ActivityForm';
 import { CustomActivityEditForm } from './ActivityEditForms';
 import { sectionClass } from './form-styles';
@@ -105,13 +106,24 @@ export function PersonalActivitiesSection() {
         </div>
       )}
 
-      {activities.isLoading ? (
+      {activities.isLoading && (
         <p className="text-sm text-[var(--text-muted)]">Loading…</p>
-      ) : list.length === 0 ? (
+      )}
+
+      {activities.isError && (
+        <QueryErrorState
+          message={activities.error?.message}
+          onRetry={() => void activities.refetch()}
+        />
+      )}
+
+      {!activities.isLoading && !activities.isError && list.length === 0 && (
         <p className="text-sm text-[var(--text-muted)]">
           No personal activities yet. Add one to track habits just for yourself.
         </p>
-      ) : (
+      )}
+
+      {!activities.isLoading && !activities.isError && list.length > 0 && (
         <ul className="space-y-3">
           {list.map((activity) => (
             <li

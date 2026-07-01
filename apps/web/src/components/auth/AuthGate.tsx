@@ -7,14 +7,22 @@ type AuthGateProps = {
   redirectTo?: string;
 };
 
-export function AuthGateInner({ children, redirectTo = '/' }: AuthGateProps) {
+function buildLoginUrl(): string {
+  const existing = new URLSearchParams(window.location.search).get('returnTo');
+  if (existing) return `/?returnTo=${encodeURIComponent(existing)}`;
+  const destination = window.location.pathname + window.location.search;
+  if (destination === '/' || destination === '') return '/';
+  return `/?returnTo=${encodeURIComponent(destination)}`;
+}
+
+export function AuthGateInner({ children }: AuthGateProps) {
   const me = trpc.auth.me.useQuery();
 
   useEffect(() => {
     if (me.isError) {
-      window.location.href = redirectTo;
+      window.location.href = buildLoginUrl();
     }
-  }, [me.isError, redirectTo]);
+  }, [me.isError]);
 
   if (me.isLoading) {
     return (

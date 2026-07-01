@@ -105,25 +105,58 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
       </nav>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-[var(--border)] bg-[var(--surface)] md:hidden">
-        {NAV_ITEMS.map((item) => {
-          const active = path === item.href || path.startsWith(`${item.href}/`);
-          return (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] uppercase tracking-wider ${
-                active ? 'text-[var(--accent-red)]' : 'text-[var(--text-muted)]'
-              }`}
-              style={{ fontFamily: 'var(--font-mono)' }}
-            >
-              <span className="text-lg" aria-hidden>
-                {item.icon}
-              </span>
-              {item.label}
-            </a>
-          );
-        })}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--surface)] md:hidden">
+        {showAdminNav && (
+          <div className="border-b border-[var(--border)]">
+            <p className="px-3 pt-2 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+              Admin
+            </p>
+            <div className="flex">
+              {ADMIN_NAV_ITEMS.map((item) => {
+                const active =
+                  path === item.href || path.startsWith(`${item.href}/`);
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider ${
+                      active
+                        ? 'text-[var(--accent-red)]'
+                        : 'text-[var(--text-muted)]'
+                    }`}
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    <span aria-hidden>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="flex">
+          {NAV_ITEMS.map((item) => {
+            const active =
+              path === item.href || path.startsWith(`${item.href}/`);
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] uppercase tracking-wider ${
+                  active
+                    ? 'text-[var(--accent-red)]'
+                    : 'text-[var(--text-muted)]'
+                }`}
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                <span className="text-lg" aria-hidden>
+                  {item.icon}
+                </span>
+                {item.label}
+              </a>
+            );
+          })}
+        </div>
       </nav>
     </>
   );
@@ -136,8 +169,16 @@ export function AppShell({
   children: ReactNode;
   currentPath?: string;
 }) {
+  const profile = trpc.profile.get.useQuery();
+  const showAdminNav =
+    !profile.isLoading &&
+    !profile.isError &&
+    profile.data?.isGroupAdmin === true;
+
   return (
-    <div className="min-h-screen bg-[var(--bg-black)] pb-16 md:pb-0 md:pl-56">
+    <div
+      className={`min-h-screen bg-[var(--bg-black)] md:pb-0 md:pl-56 ${showAdminNav ? 'pb-28' : 'pb-16'}`}
+    >
       <AppNav currentPath={currentPath} />
       {children}
     </div>

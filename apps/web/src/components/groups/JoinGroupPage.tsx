@@ -31,6 +31,10 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     { enabled: Boolean(token) },
   );
 
+  const me = trpc.auth.me.useQuery(undefined, {
+    enabled: Boolean(token) && Boolean(getToken()),
+  });
+
   const join = trpc.groups.join.useMutation({
     onSuccess: () => {
       window.location.href = '/dashboard';
@@ -113,14 +117,41 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={() => join.mutate({ token })}
-          disabled={join.isPending}
-          className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22] disabled:opacity-50"
-        >
-          {join.isPending ? 'Joining...' : 'Join Group'}
-        </button>
+        {me.isLoading ? (
+          // Signed-in members hit this while membership loads; avoid flashing a
+          // Join button (which the API would reject) before we know their group.
+          <button
+            type="button"
+            disabled
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white opacity-50"
+          >
+            Checking...
+          </button>
+        ) : me.data?.user.groupId ? (
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-black)]/40 px-4 py-5">
+            <p className="text-sm text-[var(--text-primary)]">
+              You&apos;re already in a group
+            </p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Leave your current group before joining another one.
+            </p>
+            <a
+              href="/dashboard"
+              className="mt-4 inline-block text-sm font-medium text-[var(--accent-red)] hover:underline"
+            >
+              Go to dashboard →
+            </a>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => join.mutate({ token })}
+            disabled={join.isPending}
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22] disabled:opacity-50"
+          >
+            {join.isPending ? 'Joining...' : 'Join Group'}
+          </button>
+        )}
       </div>
 
       <p className="mt-10 text-sm text-[var(--text-muted)]">

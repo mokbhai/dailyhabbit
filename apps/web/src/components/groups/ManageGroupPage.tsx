@@ -12,8 +12,16 @@ const statusColors: Record<string, string> = {
   COMPLETED: 'text-[var(--gold)]',
 };
 
+type PendingMemberAction = {
+  type: 'remove' | 'transfer';
+  userId: string;
+  memberName: string;
+};
+
 export function ManageGroupContent() {
   const [groupName, setGroupName] = useState('');
+  const [pendingAction, setPendingAction] =
+    useState<PendingMemberAction | null>(null);
   const utils = trpc.useUtils();
 
   const group = trpc.groups.getMine.useQuery();
@@ -24,11 +32,20 @@ export function ManageGroupContent() {
     onSuccess: () => utils.groups.getMine.invalidate(),
   });
   const removeMember = trpc.groups.removeMember.useMutation({
-    onSuccess: () => utils.groups.getMine.invalidate(),
+    onSuccess: () => {
+      utils.groups.getMine.invalidate();
+      setPendingAction(null);
+    },
   });
   const transferAdmin = trpc.groups.transferAdmin.useMutation({
-    onSuccess: () => utils.groups.getMine.invalidate(),
+    onSuccess: () => {
+      utils.groups.getMine.invalidate();
+      setPendingAction(null);
+    },
   });
+
+  const activeMutation =
+    pendingAction?.type === 'remove' ? removeMember : transferAdmin;
 
   if (group.isLoading) {
     return (
@@ -179,7 +196,16 @@ export function ManageGroupContent() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => transferAdmin.mutate({ userId: member.id })}
+                    onClick={() => {
+                      // Clear any prior failure so a fresh modal opens clean.
+                      removeMember.reset();
+                      transferAdmin.reset();
+                      setPendingAction({
+                        type: 'transfer',
+                        userId: member.id,
+                        memberName: member.name,
+                      });
+                    }}
                     disabled={transferAdmin.isPending}
                     className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--gold)]"
                   >
@@ -187,7 +213,15 @@ export function ManageGroupContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => removeMember.mutate({ userId: member.id })}
+                    onClick={() => {
+                      removeMember.reset();
+                      transferAdmin.reset();
+                      setPendingAction({
+                        type: 'remove',
+                        userId: member.id,
+                        memberName: member.name,
+                      });
+                    }}
                     disabled={removeMember.isPending}
                     className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-red)]"
                   >
@@ -199,6 +233,50 @@ export function ManageGroupContent() {
           ))}
         </ul>
       </div>
+
+      {pendingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <h3 className="text-lg text-[var(--text-primary)]">
+              {pendingAction.type === 'remove'
+                ? `Remove ${pendingAction.memberName} from the group?`
+                : `Make ${pendingAction.memberName} the group admin?`}
+            </h3>
+            {activeMutation.error && (
+              <p className="mt-2 text-sm text-[var(--accent-red)]">
+                {activeMutation.error.message}
+              </p>
+            )}
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingAction(null)}
+                className="flex-1 rounded border border-[var(--border)] py-2 text-sm text-[var(--text-muted)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingAction.type === 'remove') {
+                    removeMember.mutate({ userId: pendingAction.userId });
+                  } else {
+                    transferAdmin.mutate({ userId: pendingAction.userId });
+                  }
+                }}
+                disabled={activeMutation.isPending}
+                className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {activeMutation.isPending
+                  ? 'Working...'
+                  : pendingAction.type === 'remove'
+                    ? 'Remove'
+                    : 'Make admin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppNav } from '../src/components/layout/AppNav';
 
@@ -19,77 +19,145 @@ afterEach(() => {
   mockProfileUseQuery.mockReset();
 });
 
-function renderDesktopNav() {
+function renderNav() {
   render(<AppNav currentPath="/dashboard" />);
-  return screen.getAllByRole('navigation')[0];
+  const navs = screen.getAllByRole('navigation');
+  return {
+    desktopNav: navs[0],
+    mobileNav: navs[1],
+  };
+}
+
+function mockProfileAdmin() {
+  mockProfileUseQuery.mockReturnValue({
+    data: { isGroupAdmin: true },
+    isLoading: false,
+    isError: false,
+  });
+}
+
+function mockProfileNotAdmin() {
+  mockProfileUseQuery.mockReturnValue({
+    data: { isGroupAdmin: false },
+    isLoading: false,
+    isError: false,
+  });
+}
+
+function mockProfileLoading() {
+  mockProfileUseQuery.mockReturnValue({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+  });
+}
+
+function mockProfileError() {
+  mockProfileUseQuery.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: true,
+  });
 }
 
 describe('AppNav admin links', () => {
-  it('renders admin links when profile.get reports isGroupAdmin', () => {
-    mockProfileUseQuery.mockReturnValue({
-      data: { isGroupAdmin: true },
-      isLoading: false,
-      isError: false,
+  describe('desktop', () => {
+    it('renders admin links when profile.get reports isGroupAdmin', () => {
+      mockProfileAdmin();
+      const { desktopNav } = renderNav();
+
+      expect(
+        within(desktopNav).getByRole('link', { name: /Edit Activities/i }),
+      ).toHaveAttribute('href', '/admin/activities');
+      expect(
+        within(desktopNav).getByRole('link', { name: /Group Settings/i }),
+      ).toHaveAttribute('href', '/admin/group');
     });
 
-    renderDesktopNav();
+    it('does not render admin links when isGroupAdmin is false', () => {
+      mockProfileNotAdmin();
+      const { desktopNav } = renderNav();
 
-    expect(
-      screen.getByRole('link', { name: /Edit Activities/i }),
-    ).toHaveAttribute('href', '/admin/activities');
-    expect(
-      screen.getByRole('link', { name: /Group Settings/i }),
-    ).toHaveAttribute('href', '/admin/group');
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not render admin links while profile is loading', () => {
+      mockProfileLoading();
+      const { desktopNav } = renderNav();
+
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not render admin links when profile query errors', () => {
+      mockProfileError();
+      const { desktopNav } = renderNav();
+
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 
-  it('does not render admin links when isGroupAdmin is false', () => {
-    mockProfileUseQuery.mockReturnValue({
-      data: { isGroupAdmin: false },
-      isLoading: false,
-      isError: false,
+  describe('mobile', () => {
+    it('renders admin links when profile.get reports isGroupAdmin', () => {
+      mockProfileAdmin();
+      const { mobileNav } = renderNav();
+
+      expect(
+        within(mobileNav).getByRole('link', { name: /Edit Activities/i }),
+      ).toHaveAttribute('href', '/admin/activities');
+      expect(
+        within(mobileNav).getByRole('link', { name: /Group Settings/i }),
+      ).toHaveAttribute('href', '/admin/group');
     });
 
-    renderDesktopNav();
+    it('does not render admin links when isGroupAdmin is false', () => {
+      mockProfileNotAdmin();
+      const { mobileNav } = renderNav();
 
-    expect(
-      screen.queryByRole('link', { name: /Edit Activities/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: /Group Settings/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('does not render admin links while profile is loading', () => {
-    mockProfileUseQuery.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isError: false,
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
     });
 
-    renderDesktopNav();
+    it('does not render admin links while profile is loading', () => {
+      mockProfileLoading();
+      const { mobileNav } = renderNav();
 
-    expect(
-      screen.queryByRole('link', { name: /Edit Activities/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: /Group Settings/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('does not render admin links when profile query errors', () => {
-    mockProfileUseQuery.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
     });
 
-    renderDesktopNav();
+    it('does not render admin links when profile query errors', () => {
+      mockProfileError();
+      const { mobileNav } = renderNav();
 
-    expect(
-      screen.queryByRole('link', { name: /Edit Activities/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: /Group Settings/i }),
-    ).not.toBeInTheDocument();
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Edit Activities/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 });
