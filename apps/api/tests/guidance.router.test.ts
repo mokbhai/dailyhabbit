@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { guidanceRouter } from '../src/trpc/routers/guidance.router';
+import {
+  GUIDANCE_HISTORY_CONTENT_MAX_LENGTH,
+  GUIDANCE_HISTORY_MAX_ITEMS,
+  GUIDANCE_QUESTION_MAX_LENGTH,
+  guidanceRouter,
+} from '../src/trpc/routers/guidance.router';
 import type { Context } from '../src/trpc/context';
 
 function createContext(overrides: Partial<Context> = {}): Context {
@@ -67,5 +72,84 @@ describe('guidanceRouter', () => {
         question: 'Does mayo count?',
       }),
     );
+  });
+
+  it('rejects oversized questions before calling the guidance service', async () => {
+    const ask = vi.fn();
+    const caller = guidanceRouter.createCaller(
+      createContext({
+        user: {
+          id: 'user-1',
+          email: null,
+          phone: '+919876543210',
+          name: 'Sam',
+        },
+        guidanceService: { ask } as Context['guidanceService'],
+      }),
+    );
+
+    await expect(
+      caller.ask({
+        activityId: 'activity-1',
+        question: 'x'.repeat(GUIDANCE_QUESTION_MAX_LENGTH + 1),
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized guidance history before calling the guidance service', async () => {
+    const ask = vi.fn();
+    const caller = guidanceRouter.createCaller(
+      createContext({
+        user: {
+          id: 'user-1',
+          email: null,
+          phone: '+919876543210',
+          name: 'Sam',
+        },
+        guidanceService: { ask } as Context['guidanceService'],
+      }),
+    );
+
+    await expect(
+      caller.ask({
+        activityId: 'activity-1',
+        question: 'Does this count?',
+        history: Array.from({ length: GUIDANCE_HISTORY_MAX_ITEMS + 1 }, () => ({
+          role: 'user' as const,
+          content: 'previous question',
+        })),
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized guidance history messages before calling the guidance service', async () => {
+    const ask = vi.fn();
+    const caller = guidanceRouter.createCaller(
+      createContext({
+        user: {
+          id: 'user-1',
+          email: null,
+          phone: '+919876543210',
+          name: 'Sam',
+        },
+        guidanceService: { ask } as Context['guidanceService'],
+      }),
+    );
+
+    await expect(
+      caller.ask({
+        activityId: 'activity-1',
+        question: 'Does this count?',
+        history: [
+          {
+            role: 'assistant',
+            content: 'x'.repeat(GUIDANCE_HISTORY_CONTENT_MAX_LENGTH + 1),
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(ask).not.toHaveBeenCalled();
   });
 });

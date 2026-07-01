@@ -17,6 +17,10 @@ import {
   createUploadFileHandler,
   createUploadHandler,
 } from './uploads/upload-handler';
+import {
+  getUploadRateLimitConfig,
+  registerAbuseRateLimits,
+} from './rate-limit';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -72,6 +76,9 @@ async function bootstrap() {
   const fastify = app.getHttpAdapter().getInstance();
 
   await mkdir(uploadDir, { recursive: true });
+  const rateLimitConfig = await registerAbuseRateLimits(fastify, {
+    authService,
+  });
 
   await fastify.register(multipart, {
     limits: {
@@ -81,6 +88,11 @@ async function bootstrap() {
 
   fastify.post(
     '/api/uploads',
+    {
+      config: {
+        rateLimit: getUploadRateLimitConfig(rateLimitConfig, authService),
+      },
+    },
     createUploadHandler({ uploadDir, authService, prisma }),
   );
   fastify.get<{ Params: { filename?: string } }>(
