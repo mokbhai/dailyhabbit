@@ -29,12 +29,24 @@ function createProfileContext(stores: {
   const prisma = {
     user: {
       findUnique: vi.fn(
-        async ({ where }: { where: Record<string, string> }) => {
+        async ({
+          where,
+          include,
+        }: {
+          where: Record<string, string>;
+          include?: { challenges?: unknown };
+        }) => {
           if ('phone' in where)
             return stores.usersByPhone.get(where.phone) ?? null;
           if ('email' in where)
             return stores.usersByEmail.get(where.email) ?? null;
-          if ('id' in where) return stores.users.get(where.id) ?? null;
+          if ('id' in where) {
+            const user = stores.users.get(where.id) ?? null;
+            if (user && include?.challenges) {
+              return { ...user, challenges: [] };
+            }
+            return user;
+          }
           return null;
         },
       ),
@@ -73,6 +85,9 @@ function createProfileContext(stores: {
         },
       ),
     },
+    $transaction: vi.fn(async (fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma),
+    ),
   };
 
   const legacyUser = stores.users.get(USER_ID)!;
