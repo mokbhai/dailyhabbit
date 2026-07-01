@@ -15,8 +15,10 @@ import {
 import { getLiveStreak } from '../utils/live-streak';
 import {
   clampDateRange,
+  isCompletionActivityKind,
   shapeActivityCompletion,
   shapeActivitySeries,
+  toActivityLogRows,
   type ActivityCompletionResult,
   type ActivitySeriesPoint,
 } from '../utils/stats-aggregation';
@@ -127,8 +129,6 @@ export async function getDashboardStats(
   };
 }
 
-const COMPLETION_KINDS = new Set(['CHECKBOX', 'SUBPOINTS', 'TIERED']);
-
 async function assertActivityInScope(
   activity: Activity,
   userId: string,
@@ -144,27 +144,6 @@ async function assertActivityInScope(
     code: 'NOT_FOUND',
     message: 'Activity not found',
   });
-}
-
-function toActivityLogRows(
-  logs: {
-    date: Date;
-    value: number | null;
-    xpAwarded: number;
-    state: string | null;
-    tier: string | null;
-    subPoints: unknown;
-  }[],
-  timezone: string,
-) {
-  return logs.map((log) => ({
-    date: formatLocalDateKey(log.date, timezone),
-    value: log.value,
-    xpAwarded: log.xpAwarded,
-    state: log.state,
-    tier: log.tier,
-    subPoints: log.subPoints,
-  }));
 }
 
 export async function getActivitySeries(
@@ -256,7 +235,7 @@ export async function getActivityCompletion(
 
   await assertActivityInScope(activity, userId, user.groupId);
 
-  if (!COMPLETION_KINDS.has(activity.kind)) {
+  if (!isCompletionActivityKind(activity.kind)) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message:

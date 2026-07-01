@@ -65,6 +65,7 @@ export type TaskCardProps = {
   unitLabel?: string;
   xpPerUnit?: number;
   xpCap?: number;
+  currentStreak?: number;
   subPoints?: SubPointConfig[];
   tiers?: TierOption[];
   onMarkDone?: () => void;
@@ -367,6 +368,7 @@ export function TaskCard({
   unitLabel = '',
   xpPerUnit = 0,
   xpCap = 0,
+  currentStreak,
   subPoints = [],
   tiers = [],
   onMarkDone,
@@ -388,6 +390,7 @@ export function TaskCard({
   const xpAwarded = log?.xpAwarded ?? 0;
   const isComplete = status === 'COMPLETED';
   const canBodyTap = bodyTapEnabled(kind) && canEdit && !disabled;
+  const showCurrentStreak = kind !== 'NUMBER' && currentStreak !== undefined;
 
   function handleBodyTap() {
     if (!canEdit || disabled) return;
@@ -447,6 +450,15 @@ export function TaskCard({
               <span className="mt-0.5 block text-xs text-[var(--success)]">
                 {xpAwarded > 0 ? '+' : ''}
                 {xpAwarded} XP
+              </span>
+            )}
+            {showCurrentStreak && (
+              <span
+                className="mt-0.5 block text-xs font-medium uppercase tracking-wide text-[var(--gold)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                <span aria-hidden>🔥 </span>
+                {currentStreak} day streak
               </span>
             )}
           </span>

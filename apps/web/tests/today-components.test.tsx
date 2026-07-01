@@ -32,6 +32,42 @@ describe('TaskCard', () => {
     expect(onMarkDone).toHaveBeenCalledOnce();
   });
 
+  it('renders a compact current streak without blocking card taps', async () => {
+    const onMarkDone = vi.fn();
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+        currentStreak={5}
+        onMarkDone={onMarkDone}
+      />,
+    );
+
+    expect(screen.getByText(/5 day streak/i)).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /tap to complete/i }),
+    );
+    expect(onMarkDone).toHaveBeenCalledOnce();
+  });
+
+  it('does not render a current streak when none is provided', () => {
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+      />,
+    );
+
+    expect(screen.queryByText(/day streak/i)).not.toBeInTheDocument();
+  });
+
   it('calls onUndo when completed checkbox is tapped', async () => {
     const onUndo = vi.fn();
     render(
@@ -47,9 +83,12 @@ describe('TaskCard', () => {
           xpAwarded: 200,
         }}
         canEdit
+        currentStreak={3}
         onUndo={onUndo}
       />,
     );
+
+    expect(screen.getByText(/3 day streak/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /done ✓/i }));
     expect(onUndo).toHaveBeenCalledOnce();
