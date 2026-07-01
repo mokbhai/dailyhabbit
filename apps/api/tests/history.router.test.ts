@@ -12,16 +12,55 @@ type StoredLog = {
   proofUrl: string | null;
   aiVerdict: string | null;
   state: string | null;
+  tier?: string | null;
+  value?: number | null;
+  subPoints?: unknown;
   activity: {
     id: string;
     seedKey: string | null;
     title: string;
     emoji: string | null;
+    kind?: 'CHECKBOX' | 'NUMBER' | 'TIERED' | 'SUBPOINTS';
+    scored?: boolean;
+    isPersonal?: boolean;
+    deductMultiplier?: number;
+    xpComplete?: number | null;
+    xpMiss?: number | null;
+    unitLabel?: string | null;
+    xpPerUnit?: number | null;
+    xpCap?: number | null;
+    missXp?: number | null;
+    subPoints?: unknown;
+    tiers?: unknown;
   };
   challenge: {
     dayScores: Array<{ date: Date; dayNumber: number }>;
   };
 };
+
+function hydrateLog(log: StoredLog): StoredLog {
+  return {
+    ...log,
+    tier: log.tier ?? null,
+    value: log.value ?? null,
+    subPoints: log.subPoints ?? null,
+    activity: {
+      kind: 'CHECKBOX',
+      scored: true,
+      isPersonal: false,
+      deductMultiplier: 2,
+      xpComplete: 100,
+      xpMiss: -100,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+      subPoints: null,
+      tiers: null,
+      ...log.activity,
+    },
+  };
+}
 
 function createHistoryContext(logs: StoredLog[]): Context {
   const prisma = {
@@ -32,7 +71,7 @@ function createHistoryContext(logs: StoredLog[]): Context {
     },
     activityLog: {
       findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
-        logs.filter((log) => log.userId === where.userId),
+        logs.filter((log) => log.userId === where.userId).map(hydrateLog),
       ),
     },
     dayScore: {
