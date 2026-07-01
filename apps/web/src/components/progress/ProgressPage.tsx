@@ -39,6 +39,18 @@ function isCompletionKind(kind: string): boolean {
   return kind === 'CHECKBOX' || kind === 'SUBPOINTS' || kind === 'TIERED';
 }
 
+function formatShortDate(value: Date | string | null | undefined): string {
+  if (!value) return 'Not set';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return 'Not set';
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export function ProgressContent() {
   const today = trpc.activities.getToday.useQuery();
   const dashboard = trpc.stats.getDashboard.useQuery();
@@ -147,6 +159,11 @@ export function ProgressContent() {
       })),
       color: member.isSelf ? 'var(--accent-red)' : undefined,
     })) ?? [];
+  const challengeRangeLabel = dashboard.data
+    ? `${formatShortDate(dashboard.data.startDate)} – ${formatShortDate(
+        dashboard.data.estimatedFinishDate,
+      )} · ${dashboard.data.lengthDays} days`
+    : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -160,6 +177,11 @@ export function ProgressContent() {
         <p className="text-sm text-[var(--text-muted)]">
           Per-activity trends and squad XP comparison
         </p>
+        {challengeRangeLabel ? (
+          <p className="mt-1 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            {challengeRangeLabel}
+          </p>
+        ) : null}
       </header>
 
       <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">

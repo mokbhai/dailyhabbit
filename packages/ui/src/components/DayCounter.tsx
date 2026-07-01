@@ -3,8 +3,9 @@ import { cn } from '../utils/cn';
 
 export type DayCounterProps = {
   currentDay: number;
-  totalDays?: number;
+  totalDays: number;
   startDate?: Date | string | null;
+  endDate?: Date | string | null;
   estimatedFinishDate?: Date | string | null;
   className?: string;
   labelClassName?: string;
@@ -51,8 +52,9 @@ function useCountUp(target: number, duration = 800) {
 
 export function DayCounter({
   currentDay,
-  totalDays = 75,
+  totalDays,
   startDate,
+  endDate,
   estimatedFinishDate,
   className,
   labelClassName,
@@ -60,9 +62,11 @@ export function DayCounter({
   progressClassName,
   metaClassName,
 }: DayCounterProps) {
-  const displayDay = Math.min(currentDay, totalDays);
+  const safeTotalDays = Math.max(1, totalDays);
+  const displayDay = Math.min(Math.max(currentDay, 0), safeTotalDays);
   const animatedDay = useCountUp(displayDay);
-  const progress = Math.min((displayDay / totalDays) * 100, 100);
+  const progress = Math.min((displayDay / safeTotalDays) * 100, 100);
+  const rangeEndDate = endDate ?? estimatedFinishDate;
 
   return (
     <div className={cn('text-center', className)}>
@@ -77,13 +81,13 @@ export function DayCounter({
       </p>
       <div
         className={cn(
-          'mt-2 text-7xl leading-none text-[var(--text-primary)] sm:text-8xl',
+          'mt-2 text-5xl leading-none text-[var(--text-primary)] sm:text-8xl',
           numberClassName,
         )}
         style={{ fontFamily: 'var(--font-display)' }}
       >
         <span className="text-[var(--accent-red)]">{animatedDay}</span>
-        <span className="text-[var(--text-muted)]"> / {totalDays}</span>
+        <span className="text-[var(--text-muted)]"> / {safeTotalDays}</span>
       </div>
 
       <div
@@ -100,13 +104,13 @@ export function DayCounter({
 
       <div
         className={cn(
-          'mt-4 flex justify-center gap-6 text-xs text-[var(--text-muted)]',
+          'mt-4 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-[var(--text-muted)]',
           metaClassName,
         )}
         style={{ fontFamily: 'var(--font-mono)' }}
       >
-        <span>Started {formatDate(startDate)}</span>
-        <span>Est. finish {formatDate(estimatedFinishDate)}</span>
+        <span>Range {formatDate(startDate)}</span>
+        <span>to {formatDate(rangeEndDate)}</span>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ export type { DayCounterProps } from './components/DayCounter';
 export { GroupInviteCard } from './components/GroupInviteCard';
 export type { GroupInviteCardProps } from './components/GroupInviteCard';
 
-export { HeatmapGrid } from './components/HeatmapGrid';
+export { HeatmapGrid, getHeatmapColumnCount } from './components/HeatmapGrid';
 export type {
   HeatmapCellData,
   HeatmapCellState,
