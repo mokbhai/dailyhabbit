@@ -261,7 +261,7 @@ function ActivityCard({
   );
 }
 
-function DashboardContent() {
+export function DashboardContent() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const mutations = useTodayMutations();
 
@@ -402,17 +402,32 @@ function DashboardContent() {
           </section>
         )}
 
-        {heatmapQuery.data && stats && (
-          <section>
-            <h2
-              className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
-              style={{ fontFamily: 'var(--font-mono)' }}
-            >
-              {stats.lengthDays}-Day Progress
-            </h2>
-            <HeatmapGrid cells={heatmapQuery.data.cells} />
-          </section>
-        )}
+        {stats &&
+          (heatmapQuery.isLoading ||
+            heatmapQuery.isError ||
+            heatmapQuery.data) && (
+            <section>
+              <h2
+                className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {stats.lengthDays}-Day Progress
+              </h2>
+              {heatmapQuery.isLoading ? (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Loading progress...
+                </p>
+              ) : heatmapQuery.isError ? (
+                <QueryErrorState
+                  message={heatmapQuery.error?.message}
+                  onRetry={() => void heatmapQuery.refetch()}
+                  className="text-left"
+                />
+              ) : heatmapQuery.data ? (
+                <HeatmapGrid cells={heatmapQuery.data.cells} />
+              ) : null}
+            </section>
+          )}
 
         {activityTitles.length > 0 && (
           <section>
