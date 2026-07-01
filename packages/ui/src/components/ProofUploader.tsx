@@ -32,6 +32,9 @@ export function ProofUploader({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+
+  const base = apiBaseUrl ?? uploadUrl.replace(/\/api\/uploads$/, '');
 
   // Keep the preview in sync when the controlled value changes externally
   // (e.g. parent clears it after a Remove, or sets a new one), so a stale
@@ -39,6 +42,57 @@ export function ProofUploader({
   useEffect(() => {
     setPreview(value ?? null);
   }, [value]);
+
+  useEffect(() => {
+    if (!preview) {
+      setPreviewSrc(null);
+      return;
+    }
+
+    if (preview.startsWith('http') && !preview.startsWith(`${base}/uploads/`)) {
+      setPreviewSrc(preview);
+      return;
+    }
+
+    if (!authToken) {
+      setPreviewSrc(null);
+      return;
+    }
+
+    const absolutePreview = preview.startsWith('http')
+      ? preview
+      : `${base}${preview}`;
+    let objectUrl: string | null = null;
+    const controller = new AbortController();
+
+    void Promise.resolve(
+      fetch(absolutePreview, {
+        headers: { Authorization: `Bearer ${authToken}` },
+        signal: controller.signal,
+      }),
+    )
+      .then(async (response) => {
+        if (!response?.ok) {
+          throw new Error('Preview unavailable');
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewSrc(objectUrl);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        setPreviewSrc(null);
+      });
+
+    return () => {
+      controller.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [authToken, base, preview]);
 
   async function handleFile(file: File) {
     if (!authToken) {
@@ -79,13 +133,11 @@ export function ProofUploader({
     }
   }
 
-  const base = apiBaseUrl ?? uploadUrl.replace(/\/api\/uploads$/, '');
-
   return (
     <div className={cn('space-y-3', className)}>
-      {preview && (
+      {previewSrc && (
         <img
-          src={preview.startsWith('http') ? preview : `${base}${preview}`}
+          src={previewSrc}
           alt="Proof preview"
           className={cn(
             'max-h-48 w-full rounded-lg border border-[var(--border)] object-cover',

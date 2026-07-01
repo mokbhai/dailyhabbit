@@ -2,14 +2,8 @@ import { useState } from 'react';
 import { GroupInviteCard } from '@workspace-starter/ui';
 import { TrpcProvider } from '../TrpcProvider';
 import { AuthGateInner } from '../auth/AuthGate';
+import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { trpc } from '../../lib/trpc';
-
-const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
-
-function displayAvatarUrl(avatarUrl: string | null): string | null {
-  if (!avatarUrl) return null;
-  return avatarUrl.startsWith('http') ? avatarUrl : `${apiUrl}${avatarUrl}`;
-}
 
 const statusColors: Record<string, string> = {
   ACTIVE: 'text-[var(--success)]',
@@ -143,8 +137,8 @@ function ManageGroupContent() {
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--border)] text-sm font-bold text-[var(--text-muted)]">
                   {member.avatarUrl ? (
-                    <img
-                      src={displayAvatarUrl(member.avatarUrl) ?? ''}
+                    <AuthenticatedImage
+                      src={member.avatarUrl}
                       alt=""
                       className="h-10 w-10 rounded-full object-cover"
                     />

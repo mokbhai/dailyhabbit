@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ProofUploader } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
+import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
@@ -180,12 +181,8 @@ function ProfileContent() {
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--border)] text-2xl font-bold text-[var(--text-muted)]">
             {data.avatarUrl ? (
-              <img
-                src={
-                  data.avatarUrl.startsWith('http')
-                    ? data.avatarUrl
-                    : `${apiUrl}${data.avatarUrl}`
-                }
+              <AuthenticatedImage
+                src={data.avatarUrl}
                 alt=""
                 className="h-16 w-16 rounded-full object-cover"
               />

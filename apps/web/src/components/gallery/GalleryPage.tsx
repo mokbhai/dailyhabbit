@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
+import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { verdictClass } from '../../lib/ai-verdict';
 import { trpc } from '../../lib/trpc';
-
-const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const PROGRESS_PHOTO_SEED = 'PROGRESS_PHOTO';
 
@@ -58,7 +57,7 @@ function Lightbox({
         >
           Close
         </button>
-        <img
+        <AuthenticatedImage
           src={photo.src}
           alt={photo.alt}
           className="max-h-[80vh] w-full rounded-lg object-contain"
@@ -189,7 +188,7 @@ export function GalleryContent() {
               </h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {day.photos.map((photo) => {
-                  const src = `${apiUrl}${photo.proofUrl}`;
+                  const src = photo.proofUrl;
                   return (
                     <button
                       key={photo.activityLogId}
@@ -205,7 +204,7 @@ export function GalleryContent() {
                         })
                       }
                     >
-                      <img
+                      <AuthenticatedImage
                         src={src}
                         alt={photo.title}
                         loading="lazy"

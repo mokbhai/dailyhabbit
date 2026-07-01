@@ -51,6 +51,10 @@ describe('ProofUploader', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ url: '/uploads/ok.jpg' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          blob: async () => new Blob(['image'], { type: 'image/jpeg' }),
         }),
     );
     const onUploaded = vi.fn();
