@@ -14,10 +14,7 @@ const tinyPng = Buffer.from(
 );
 
 function uniquePhone(offset: number): string {
-  const suffix = String((Date.now() + offset) % 1_000_000_000).padStart(
-    9,
-    '0',
-  );
+  const suffix = String((Date.now() + offset) % 1_000_000_000).padStart(9, '0');
   return `9${suffix}`;
 }
 
@@ -64,7 +61,9 @@ async function createBrowserUser(browser: Browser) {
   return { context, page, unexpected };
 }
 
-async function closeQuietly(context: Awaited<ReturnType<Browser['newContext']>>) {
+async function closeQuietly(
+  context: Awaited<ReturnType<Browser['newContext']>>,
+) {
   await context.close().catch(() => {});
 }
 
@@ -154,7 +153,9 @@ test.describe('production start flows', () => {
     await expect(noReels).toContainText('Done');
 
     const progressPhoto = taskCard(admin.page, 'Progress photo');
-    await progressPhoto.getByRole('button', { name: /Progress photo/i }).click();
+    await progressPhoto
+      .getByRole('button', { name: /Progress photo/i })
+      .click();
     await progressPhoto.getByRole('button', { name: 'Expand' }).click();
     await expect(
       progressPhoto.getByRole('button', { name: /Upload photo proof/i }),
@@ -184,7 +185,9 @@ test.describe('production start flows', () => {
     await expect(admin.page.getByText('Leaderboard XP')).toBeVisible();
 
     await admin.page.goto('/history');
-    await expect(admin.page.getByRole('heading', { name: 'History' })).toBeVisible();
+    await expect(
+      admin.page.getByRole('heading', { name: 'History' }),
+    ).toBeVisible();
 
     await admin.page.goto('/gallery');
     await expect(
@@ -198,7 +201,9 @@ test.describe('production start flows', () => {
   test('solo personal activity and profile whatsapp opt-in', async () => {
     await register(solo.page, soloName, uniquePhone(3));
     await solo.page.goto('/profile');
-    await expect(solo.page.getByRole('heading', { name: 'Profile' })).toBeVisible();
+    await expect(
+      solo.page.getByRole('heading', { name: 'Profile' }),
+    ).toBeVisible();
     await solo.page.getByRole('button', { name: 'Add' }).click();
     await solo.page.locator('#activity-title').fill(personalTitle);
     await solo.page.locator('#activity-emoji').fill('🧘');
@@ -206,7 +211,9 @@ test.describe('production start flows', () => {
     await expect(solo.page.getByText(personalTitle)).toBeVisible();
 
     await solo.page.goto('/dashboard');
-    await expect(solo.page.getByText('Personal · off leaderboard')).toBeVisible();
+    await expect(
+      solo.page.getByText('Personal · off leaderboard'),
+    ).toBeVisible();
     await taskCard(solo.page, personalTitle)
       .getByRole('button', { name: new RegExp(personalTitle) })
       .click();
