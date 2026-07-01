@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
+import { Prisma } from '@workspace-starter/db';
 import { normalizePhone, PhoneValidationError } from '../auth/phone';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
-import { isValidTimeZone } from '../utils/day-window';
+import { getUserLocalDate, isValidTimeZone } from '../utils/day-window';
 
 export type ProfileData = {
   id: string;
@@ -187,23 +188,207 @@ export async function updateProfile(
     });
   }
 
+  const select = {
+    id: true,
+    name: true,
+    email: true,
+    phone: true,
+    avatarUrl: true,
+    timezone: true,
+    reminderTime: true,
+    whatsappOptIn: true,
+    groupId: true,
+  } as const;
+
+  const nextTimezone = data.timezone;
+  if (nextTimezone !== undefined) {
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { challenges: activeChallengeRelationArgs() },
+    });
+
+    if (!existingUser) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+    }
+
+    if (existingUser.timezone !== nextTimezone) {
+      return prisma.$transaction(async (tx) => {
+        await rekeyCurrentDayForTimezoneChange(tx, {
+          userId,
+          challengeId: existingUser.challenges[0]?.id ?? null,
+          oldTimezone: existingUser.timezone,
+          newTimezone: nextTimezone,
+        });
+
+        return tx.user.update({
+          where: { id: userId },
+          data,
+          select,
+        });
+      });
+    }
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      avatarUrl: true,
-      timezone: true,
-      reminderTime: true,
-      whatsappOptIn: true,
-      groupId: true,
-    },
+    select,
   });
 
   return user;
+}
+
+type RekeyPrisma = Pick<PrismaService, 'activityLog' | 'dayScore'>;
+
+export async function rekeyCurrentDayForTimezoneChange(
+  prisma: RekeyPrisma,
+  {
+    userId,
+    challengeId,
+    oldTimezone,
+    newTimezone,
+    now = new Date(),
+  }: {
+    userId: string;
+    challengeId: string | null;
+    oldTimezone: string;
+    newTimezone: string;
+    now?: Date;
+  },
+): Promise<void> {
+  if (!challengeId || oldTimezone === newTimezone) {
+    return;
+  }
+
+  const oldDate = getUserLocalDate(oldTimezone, now);
+  const newDate = getUserLocalDate(newTimezone, now);
+  if (oldDate.getTime() === newDate.getTime()) {
+    return;
+  }
+
+  // Preserve the existing UTC-midnight storage model by moving only the active,
+  // unfinalized local day. Historical finalized days keep their original keys.
+  const logs = await prisma.activityLog.findMany({
+    where: { challengeId, userId, date: oldDate },
+  });
+
+  for (const log of logs) {
+    const existingAtNewDate = await prisma.activityLog.findUnique({
+      where: {
+        challengeId_activityId_date: {
+          challengeId,
+          activityId: log.activityId,
+          date: newDate,
+        },
+      },
+    });
+
+    if (!existingAtNewDate) {
+      await prisma.activityLog.update({
+        where: { id: log.id },
+        data: { date: newDate },
+      });
+      continue;
+    }
+
+    if (isMoreCompleteActivityLog(log, existingAtNewDate)) {
+      await prisma.activityLog.update({
+        where: { id: existingAtNewDate.id },
+        data: {
+          value: log.value,
+          tier: log.tier,
+          subPoints: log.subPoints === null ? Prisma.DbNull : log.subPoints,
+          state: log.state,
+          xpAwarded: log.xpAwarded,
+          proofUrl: log.proofUrl,
+          aiVerdict: log.aiVerdict,
+        },
+      });
+    }
+
+    await prisma.activityLog.delete({ where: { id: log.id } });
+  }
+
+  const dayScore = await prisma.dayScore.findFirst({
+    where: { challengeId, userId, date: oldDate, finalized: false },
+  });
+  if (!dayScore) {
+    return;
+  }
+
+  const existingScoreAtNewDate = await prisma.dayScore.findUnique({
+    where: {
+      challengeId_date: {
+        challengeId,
+        date: newDate,
+      },
+    },
+  });
+
+  if (!existingScoreAtNewDate) {
+    await prisma.dayScore.update({
+      where: { id: dayScore.id },
+      data: { date: newDate },
+    });
+    return;
+  }
+
+  if (!existingScoreAtNewDate.finalized) {
+    await prisma.dayScore.update({
+      where: { id: existingScoreAtNewDate.id },
+      data: {
+        dayNumber: dayScore.dayNumber,
+        xpEarned: dayScore.xpEarned,
+        xpDeducted: dayScore.xpDeducted,
+        netXp: dayScore.netXp,
+        personalXp: dayScore.personalXp,
+        breakdown:
+          dayScore.breakdown === null ? Prisma.JsonNull : dayScore.breakdown,
+        finalized: false,
+      },
+    });
+  }
+
+  await prisma.dayScore.delete({ where: { id: dayScore.id } });
+}
+
+function isMoreCompleteActivityLog(
+  candidate: {
+    value: number | null;
+    tier: string | null;
+    subPoints: unknown;
+    state: string | null;
+    proofUrl: string | null;
+    aiVerdict: string | null;
+  },
+  current: {
+    value: number | null;
+    tier: string | null;
+    subPoints: unknown;
+    state: string | null;
+    proofUrl: string | null;
+    aiVerdict: string | null;
+  },
+): boolean {
+  return activityLogCompleteness(candidate) > activityLogCompleteness(current);
+}
+
+function activityLogCompleteness(log: {
+  value: number | null;
+  tier: string | null;
+  subPoints: unknown;
+  state: string | null;
+  proofUrl: string | null;
+  aiVerdict: string | null;
+}): number {
+  return [
+    log.value,
+    log.tier,
+    log.subPoints,
+    log.state,
+    log.proofUrl,
+    log.aiVerdict,
+  ].filter((value) => value !== null && value !== undefined).length;
 }
 
 export async function leaveGroup(prisma: PrismaService, userId: string) {
