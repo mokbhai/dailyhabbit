@@ -51,7 +51,9 @@ test('root exposes repository guardrail scripts with pinned tooling', async () =
   );
   assert.match(pkg.scripts?.verify ?? '', /pnpm verify:fast/);
   assert.match(pkg.scripts?.verify ?? '', /pnpm build/);
+  assert.match(pkg.scripts?.verify ?? '', /pnpm smoke:api/);
   assert.match(pkg.scripts?.verify ?? '', /pnpm test/);
+  assert.equal(pkg.scripts?.['smoke:api'], 'node scripts/smoke-api.mjs');
   assert.match(
     pkg.scripts?.['hooks:install'] ?? '',
     /core\.hooksPath .githooks/,
