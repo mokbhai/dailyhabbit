@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { GroupInviteCard, HeatmapGrid } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
-function AdminGroupContent() {
+export function AdminGroupContent() {
   const [adminMode, setAdminMode] = useState(false);
   const utils = trpc.useUtils();
 
@@ -24,6 +25,17 @@ function AdminGroupContent() {
         <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
           Loading...
         </p>
+      </div>
+    );
+  }
+
+  if (group.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <QueryErrorState
+          message={group.error?.message}
+          onRetry={() => void group.refetch()}
+        />
       </div>
     );
   }
@@ -91,6 +103,12 @@ function AdminGroupContent() {
         isRegenerating={regenerateInvite.isPending}
       />
 
+      {regenerateInvite.error && (
+        <p className="text-sm text-[var(--accent-red)]">
+          {regenerateInvite.error.message}
+        </p>
+      )}
+
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2
@@ -112,7 +130,12 @@ function AdminGroupContent() {
           </button>
         </div>
 
-        {heatmap.data && (
+        {heatmap.isError ? (
+          <QueryErrorState
+            message={heatmap.error?.message}
+            onRetry={() => void heatmap.refetch()}
+          />
+        ) : heatmap.data ? (
           <HeatmapGrid
             cells={heatmap.data.cells}
             adminMode={adminMode}
@@ -120,6 +143,12 @@ function AdminGroupContent() {
               setDayLabel.mutate({ dayNumber, labelText })
             }
           />
+        ) : null}
+
+        {setDayLabel.error && (
+          <p className="mt-2 text-sm text-[var(--accent-red)]">
+            {setDayLabel.error.message}
+          </p>
         )}
 
         <p className="mt-4 text-xs text-[var(--text-muted)]">
