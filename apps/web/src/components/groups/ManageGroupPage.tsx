@@ -3,6 +3,7 @@ import { GroupInviteCard } from '@workspace-starter/ui';
 import { TrpcProvider } from '../TrpcProvider';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AuthenticatedImage } from '../common/AuthenticatedImage';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { trpc } from '../../lib/trpc';
 
 const statusColors: Record<string, string> = {
@@ -11,7 +12,7 @@ const statusColors: Record<string, string> = {
   COMPLETED: 'text-[var(--gold)]',
 };
 
-function ManageGroupContent() {
+export function ManageGroupContent() {
   const [groupName, setGroupName] = useState('');
   const utils = trpc.useUtils();
 
@@ -35,6 +36,17 @@ function ManageGroupContent() {
         <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
           Loading...
         </p>
+      </div>
+    );
+  }
+
+  if (group.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <QueryErrorState
+          message={group.error?.message}
+          onRetry={() => void group.refetch()}
+        />
       </div>
     );
   }

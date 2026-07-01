@@ -5,6 +5,7 @@ import {
   StreakBadge,
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
@@ -38,7 +39,7 @@ function isCompletionKind(kind: string): boolean {
   return kind === 'CHECKBOX' || kind === 'SUBPOINTS' || kind === 'TIERED';
 }
 
-function ProgressContent() {
+export function ProgressContent() {
   const today = trpc.activities.getToday.useQuery();
   const dashboard = trpc.stats.getDashboard.useQuery();
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(
@@ -116,6 +117,21 @@ function ProgressContent() {
     );
   }
 
+  if (today.isError || dashboard.isError) {
+    const errorQuery = today.isError ? today : dashboard;
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <QueryErrorState
+          message={errorQuery.error?.message}
+          onRetry={() => {
+            if (today.isError) void today.refetch();
+            if (dashboard.isError) void dashboard.refetch();
+          }}
+        />
+      </div>
+    );
+  }
+
   const seriesChartData =
     activitySeries.data?.map((point) => ({
       date: point.date,
@@ -179,6 +195,12 @@ function ProgressContent() {
               <p className="text-sm text-[var(--text-muted)]">
                 Loading chart...
               </p>
+            ) : activitySeries.isError ? (
+              <QueryErrorState
+                message={activitySeries.error?.message}
+                onRetry={() => void activitySeries.refetch()}
+                className="text-left"
+              />
             ) : (
               <LineChart
                 series={[
@@ -206,6 +228,12 @@ function ProgressContent() {
 
             {activityCompletion.isLoading ? (
               <p className="text-sm text-[var(--text-muted)]">Loading...</p>
+            ) : activityCompletion.isError ? (
+              <QueryErrorState
+                message={activityCompletion.error?.message}
+                onRetry={() => void activityCompletion.refetch()}
+                className="text-left"
+              />
             ) : activityCompletion.data ? (
               <>
                 {activityCompletion.data.rateByWeek.length > 0 ? (
@@ -285,9 +313,11 @@ function ProgressContent() {
         {leaderboardSeries.isLoading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading chart...</p>
         ) : leaderboardSeries.isError ? (
-          <p className="text-sm text-[var(--text-muted)]">
-            Join a group to compare XP with your squad.
-          </p>
+          <QueryErrorState
+            message={leaderboardSeries.error?.message}
+            onRetry={() => void leaderboardSeries.refetch()}
+            className="text-left"
+          />
         ) : (
           <LineChart
             series={leaderboardChartSeries}

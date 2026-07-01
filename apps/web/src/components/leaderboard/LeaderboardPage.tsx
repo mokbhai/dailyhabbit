@@ -6,6 +6,7 @@ import {
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AuthenticatedImage } from '../common/AuthenticatedImage';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
@@ -18,7 +19,7 @@ const WINDOW_OPTIONS: { value: LeaderboardWindow; label: string }[] = [
   { value: 'total', label: 'Total' },
 ];
 
-function LeaderboardContent() {
+export function LeaderboardContent() {
   const [sortBy, setSortBy] = useState<LeaderboardSortBy>('xp');
   const [window, setWindow] = useState<LeaderboardWindow>('today');
   const me = trpc.auth.me.useQuery();
@@ -41,7 +42,10 @@ function LeaderboardContent() {
   if (leaderboard.isError) {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center">
-        <p className="text-[var(--accent-red)]">{leaderboard.error.message}</p>
+        <QueryErrorState
+          message={leaderboard.error.message}
+          onRetry={() => void leaderboard.refetch()}
+        />
         <a
           href="/join"
           className="mt-4 inline-block text-sm text-[var(--text-muted)] hover:text-[var(--accent-red)]"
