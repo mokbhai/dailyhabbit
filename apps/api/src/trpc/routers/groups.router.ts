@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { seedGroupActivities } from '@workspace-starter/db';
 import { z } from 'zod';
-import type { PrismaService } from '../../prisma/prisma.service';
 import { latestChallengeRelationArgs } from '../../utils/challenge-query';
 import {
   MAX_CHALLENGE_RANGE_DAYS,
@@ -13,6 +12,11 @@ import {
   lengthDaysFromRange,
 } from '../../utils/challenge-range';
 import { buildInviteUrl } from '../../utils/invite-url';
+import {
+  getGroupAdminUserIds,
+  getReplacementAdminId,
+  requireGroupAdmin,
+} from '../../utils/group-admin';
 import { getMemberStatus } from '../../utils/member-status';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
 
@@ -36,23 +40,7 @@ function ensureRangeWithinLimit(lengthDays: number) {
   }
 }
 
-export async function requireGroupAdmin(
-  prisma: PrismaService,
-  userId: string,
-  groupId: string,
-) {
-  const group = await prisma.group.findUnique({ where: { id: groupId } });
-
-  if (!group) {
-    throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
-  }
-
-  if (group.adminUserId !== userId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
-  }
-
-  return group;
-}
+export { requireGroupAdmin };
 
 export const groupsRouter = router({
   create: protectedProcedure
@@ -86,6 +74,13 @@ export const groupsRouter = router({
             challengeStartDate: range.startDate,
             challengeEndDate: range.endDate,
             challengeTimezone: timezone,
+          },
+        });
+
+        await tx.groupAdmin.create({
+          data: {
+            groupId: created.id,
+            userId: ctx.user.id,
           },
         });
 
@@ -147,6 +142,10 @@ export const groupsRouter = router({
     const group = await ctx.prisma.group.findUnique({
       where: { id: user.groupId },
       include: {
+        admins: {
+          select: { userId: true },
+          orderBy: { createdAt: 'asc' },
+        },
         members: {
           select: {
             id: true,
@@ -162,6 +161,11 @@ export const groupsRouter = router({
       return null;
     }
 
+    const adminUserIds =
+      group.admins.length > 0
+        ? group.admins.map((admin) => admin.userId)
+        : [group.adminUserId];
+    const adminUserIdSet = new Set(adminUserIds);
     const members = group.members.map((member) => {
       const challenge = member.challenges[0] ?? null;
       const progress = challenge
@@ -174,6 +178,8 @@ export const groupsRouter = router({
         id: member.id,
         name: member.name,
         avatarUrl: member.avatarUrl,
+        isSelf: member.id === ctx.user.id,
+        isAdmin: adminUserIdSet.has(member.id),
         currentDay: progress?.currentDay ?? 0,
         status: getMemberStatus(
           challenge,
@@ -201,7 +207,9 @@ export const groupsRouter = router({
       name: group.name,
       inviteToken: group.inviteToken,
       adminUserId: group.adminUserId,
-      isAdmin: group.adminUserId === ctx.user.id,
+      adminUserIds,
+      adminCount: adminUserIds.length,
+      isAdmin: adminUserIdSet.has(ctx.user.id),
       inviteUrl: buildInviteUrl(ctx.req, group.inviteToken),
       challengeRange,
       members,
@@ -533,17 +541,18 @@ export const groupsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'No group found' });
       }
 
-      await requireGroupAdmin(ctx.prisma, ctx.user.id, user.groupId);
+      const groupId = user.groupId;
+      const group = await requireGroupAdmin(ctx.prisma, ctx.user.id, groupId);
 
       if (input.userId === ctx.user.id) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Transfer admin before leaving or use profile settings',
+          message: 'Use profile settings to leave the group',
         });
       }
 
       const member = await ctx.prisma.user.findFirst({
-        where: { id: input.userId, groupId: user.groupId },
+        where: { id: input.userId, groupId },
         include: {
           challenges: {
             where: { isActive: true },
@@ -557,9 +566,41 @@ export const groupsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
       }
 
+      const adminUserIds = await getGroupAdminUserIds(
+        ctx.prisma,
+        groupId,
+        group.adminUserId,
+      );
+      const targetIsAdmin = adminUserIds.includes(input.userId);
+      if (targetIsAdmin && adminUserIds.length <= 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot remove the last admin',
+        });
+      }
+      const replacementAdminId = targetIsAdmin
+        ? (adminUserIds.find((adminId) => adminId !== input.userId) ?? null)
+        : null;
+
       // Mirror leaveGroup: deactivate the member's active challenge so it is not
       // left frozen-but-active (the day finalizer skips users without a group).
       await ctx.prisma.$transaction(async (tx) => {
+        if (targetIsAdmin) {
+          await tx.groupAdmin.deleteMany({
+            where: {
+              groupId,
+              userId: input.userId,
+            },
+          });
+
+          if (replacementAdminId && member.id === group.adminUserId) {
+            await tx.group.update({
+              where: { id: groupId },
+              data: { adminUserId: replacementAdminId },
+            });
+          }
+        }
+
         const activeChallenge = member.challenges[0];
         if (activeChallenge) {
           await tx.challenge.update({
@@ -577,7 +618,7 @@ export const groupsRouter = router({
       return { success: true };
     }),
 
-  transferAdmin: protectedProcedure
+  promoteAdmin: protectedProcedure
     .input(z.object({ userId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUnique({
@@ -593,7 +634,7 @@ export const groupsRouter = router({
       if (input.userId === ctx.user.id) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'You are already the admin',
+          message: 'You are already an admin',
         });
       }
 
@@ -605,11 +646,95 @@ export const groupsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
       }
 
-      await ctx.prisma.group.update({
-        where: { id: user.groupId },
-        data: { adminUserId: input.userId },
+      await ctx.prisma.groupAdmin.upsert({
+        where: {
+          groupId_userId: {
+            groupId: user.groupId,
+            userId: input.userId,
+          },
+        },
+        create: {
+          groupId: user.groupId,
+          userId: input.userId,
+        },
+        update: {},
       });
 
-      return { adminUserId: input.userId };
+      return { userId: input.userId };
+    }),
+
+  demoteAdmin: protectedProcedure
+    .input(z.object({ userId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: ctx.user.id },
+      });
+
+      if (!user?.groupId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No group found' });
+      }
+
+      const group = await requireGroupAdmin(
+        ctx.prisma,
+        ctx.user.id,
+        user.groupId,
+      );
+
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Ask another admin to remove your admin access',
+        });
+      }
+
+      const member = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, groupId: user.groupId },
+      });
+
+      if (!member) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
+      }
+
+      const adminUserIds = await getGroupAdminUserIds(
+        ctx.prisma,
+        user.groupId,
+        group.adminUserId,
+      );
+
+      if (!adminUserIds.includes(input.userId)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Member is not an admin',
+        });
+      }
+
+      if (adminUserIds.length <= 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot remove the last admin',
+        });
+      }
+
+      const replacementAdminId =
+        adminUserIds.find((adminId) => adminId !== input.userId) ??
+        (await getReplacementAdminId(ctx.prisma, user.groupId, input.userId));
+
+      await ctx.prisma.$transaction(async (tx) => {
+        await tx.groupAdmin.deleteMany({
+          where: {
+            groupId: user.groupId!,
+            userId: input.userId,
+          },
+        });
+
+        if (input.userId === group.adminUserId && replacementAdminId) {
+          await tx.group.update({
+            where: { id: user.groupId! },
+            data: { adminUserId: replacementAdminId },
+          });
+        }
+      });
+
+      return { userId: input.userId };
     }),
 });

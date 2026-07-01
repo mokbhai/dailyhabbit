@@ -36,6 +36,12 @@ type StoredGroup = {
   challengeTimezone: string | null;
 };
 
+type StoredGroupAdmin = {
+  groupId: string;
+  userId: string;
+  createdAt: Date;
+};
+
 type StoredChallenge = {
   id: string;
   userId: string;
@@ -52,6 +58,7 @@ type GroupsStores = {
   users: Map<string, StoredUser>;
   groups: Map<string, StoredGroup>;
   groupsByToken: Map<string, StoredGroup>;
+  groupAdmins: Map<string, StoredGroupAdmin>;
   challenges: Map<string, StoredChallenge>;
   activityCounts: Map<string, number>;
 };
@@ -70,9 +77,14 @@ function createGroupsStores(): GroupsStores {
     users: new Map([[CALLER_ID, caller]]),
     groups: new Map(),
     groupsByToken: new Map(),
+    groupAdmins: new Map(),
     challenges: new Map(),
     activityCounts: new Map(),
   };
+}
+
+function groupAdminKey(groupId: string, userId: string): string {
+  return `${groupId}:${userId}`;
 }
 
 function createGroupsContext(
@@ -177,14 +189,61 @@ function createGroupsContext(
     },
     group: {
       findUnique: vi.fn(
-        async ({ where }: { where: { id?: string; inviteToken?: string } }) => {
+        async ({
+          where,
+          include,
+        }: {
+          where: { id?: string; inviteToken?: string };
+          include?: {
+            admins?: { select?: { userId?: boolean }; orderBy?: unknown };
+            members?: {
+              select?: {
+                id?: boolean;
+                name?: boolean;
+                avatarUrl?: boolean;
+                challenges?: unknown;
+              };
+            };
+          };
+        }) => {
+          let group: StoredGroup | null = null;
           if ('inviteToken' in where && where.inviteToken) {
-            return stores.groupsByToken.get(where.inviteToken) ?? null;
+            group = stores.groupsByToken.get(where.inviteToken) ?? null;
           }
           if ('id' in where && where.id) {
-            return stores.groups.get(where.id) ?? null;
+            group = stores.groups.get(where.id) ?? null;
           }
-          return null;
+          if (!group) return null;
+
+          const row: Record<string, unknown> = { ...group };
+          if (include?.admins) {
+            row.admins = [...stores.groupAdmins.values()]
+              .filter((admin) => admin.groupId === group.id)
+              .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+              .map((admin) => ({ userId: admin.userId }));
+          }
+          if (include?.members) {
+            row.members = [...stores.users.values()]
+              .filter((member) => member.groupId === group.id)
+              .map((member) => {
+                const challenges = [...stores.challenges.values()]
+                  .filter((challenge) => challenge.userId === member.id)
+                  .sort(
+                    (a, b) =>
+                      Number(b.isActive) - Number(a.isActive) ||
+                      b.startDate.getTime() - a.startDate.getTime(),
+                  )
+                  .slice(0, 1);
+                return {
+                  id: member.id,
+                  name: member.name,
+                  avatarUrl: null,
+                  challenges,
+                };
+              });
+          }
+
+          return row;
         },
       ),
       create: vi.fn(
@@ -229,6 +288,83 @@ function createGroupsContext(
           stores.groups.set(where.id, updated);
           stores.groupsByToken.set(updated.inviteToken, updated);
           return updated;
+        },
+      ),
+    },
+    groupAdmin: {
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { groupId: string };
+          select?: { userId?: boolean };
+          orderBy?: unknown;
+        }) =>
+          [...stores.groupAdmins.values()]
+            .filter((admin) => admin.groupId === where.groupId)
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+            .map((admin) => ({ userId: admin.userId })),
+      ),
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { groupId: string; userId?: { not: string } };
+          select?: { userId?: boolean };
+          orderBy?: unknown;
+        }) =>
+          [...stores.groupAdmins.values()]
+            .filter(
+              (admin) =>
+                admin.groupId === where.groupId &&
+                admin.userId !== where.userId?.not,
+            )
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+            .map((admin) => ({ userId: admin.userId }))[0] ?? null,
+      ),
+      create: vi.fn(
+        async ({ data }: { data: { groupId: string; userId: string } }) => {
+          const admin: StoredGroupAdmin = {
+            groupId: data.groupId,
+            userId: data.userId,
+            createdAt: new Date(),
+          };
+          stores.groupAdmins.set(
+            groupAdminKey(admin.groupId, admin.userId),
+            admin,
+          );
+          return admin;
+        },
+      ),
+      upsert: vi.fn(
+        async ({
+          where,
+          create,
+        }: {
+          where: { groupId_userId: { groupId: string; userId: string } };
+          create: { groupId: string; userId: string };
+          update: Record<string, never>;
+        }) => {
+          const key = groupAdminKey(
+            where.groupId_userId.groupId,
+            where.groupId_userId.userId,
+          );
+          const existing = stores.groupAdmins.get(key);
+          if (existing) return existing;
+          const admin: StoredGroupAdmin = {
+            groupId: create.groupId,
+            userId: create.userId,
+            createdAt: new Date(),
+          };
+          stores.groupAdmins.set(key, admin);
+          return admin;
+        },
+      ),
+      deleteMany: vi.fn(
+        async ({ where }: { where: { groupId: string; userId: string } }) => {
+          const key = groupAdminKey(where.groupId, where.userId);
+          const deleted = stores.groupAdmins.delete(key);
+          return { count: deleted ? 1 : 0 };
         },
       ),
     },
@@ -379,6 +515,11 @@ function seedGroup(
   };
   stores.groups.set(id, group);
   stores.groupsByToken.set(inviteToken, group);
+  stores.groupAdmins.set(groupAdminKey(id, adminUserId), {
+    groupId: id,
+    userId: adminUserId,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  });
   return group;
 }
 
@@ -439,6 +580,9 @@ describe('groupsRouter create', () => {
 
     expect(result.group.name).toBe('My Group');
     expect(result.group.adminUserId).toBe(CALLER_ID);
+    expect(
+      stores.groupAdmins.get(groupAdminKey(result.group.id, CALLER_ID)),
+    ).toMatchObject({ groupId: result.group.id, userId: CALLER_ID });
     expect(stores.users.get(CALLER_ID)?.groupId).toBe(result.group.id);
     expect(seedGroupActivities).toHaveBeenCalledWith(
       expect.anything(),
@@ -548,6 +692,66 @@ describe('groupsRouter join', () => {
   });
 });
 
+describe('groupsRouter getMine', () => {
+  it('returns member-level admin badges and admin totals', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, MEMBER_ID), {
+      groupId: GROUP_ID,
+      userId: MEMBER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    const result = await caller.getMine();
+
+    expect(result).toMatchObject({
+      adminUserId: CALLER_ID,
+      adminUserIds: [CALLER_ID, MEMBER_ID],
+      adminCount: 2,
+      isAdmin: true,
+    });
+    expect(result?.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: CALLER_ID,
+          isSelf: true,
+          isAdmin: true,
+        }),
+        expect.objectContaining({
+          id: MEMBER_ID,
+          isSelf: false,
+          isAdmin: true,
+        }),
+      ]),
+    );
+  });
+
+  it('treats a secondary admin as an admin', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, MEMBER_ID), {
+      groupId: GROUP_ID,
+      userId: MEMBER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const caller = groupsRouter.createCaller(
+      createGroupsContext(stores, MEMBER_ID),
+    );
+
+    const result = await caller.getMine();
+
+    expect(result?.isAdmin).toBe(true);
+    expect(
+      result?.members.find((member) => member.id === MEMBER_ID),
+    ).toMatchObject({ isSelf: true, isAdmin: true });
+  });
+});
+
 describe('groupsRouter setChallengeRange', () => {
   it('lets an admin set a custom range and syncs active member challenges', async () => {
     const stores = createGroupsStores();
@@ -626,6 +830,39 @@ describe('groupsRouter setChallengeRange', () => {
       message: 'Admin only',
     } satisfies Partial<TRPCError>);
   });
+
+  it('lets a secondary admin set a custom range', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, MEMBER_ID), {
+      groupId: GROUP_ID,
+      userId: MEMBER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    seedActiveChallenge(stores, { userId: CALLER_ID, groupId: GROUP_ID });
+    seedActiveChallenge(stores, {
+      id: 'challenge-member',
+      userId: MEMBER_ID,
+      groupId: GROUP_ID,
+    });
+    const caller = groupsRouter.createCaller(
+      createGroupsContext(stores, MEMBER_ID),
+    );
+
+    const result = await caller.setChallengeRange({
+      startDate: new Date('2026-07-01T12:00:00.000Z'),
+      endDate: new Date('2026-07-07T12:00:00.000Z'),
+      timezone: 'UTC',
+    });
+
+    expect(result.lengthDays).toBe(7);
+    expect(stores.groups.get(GROUP_ID)).toMatchObject({
+      challengeStartDate: new Date('2026-07-01T00:00:00.000Z'),
+      challengeEndDate: new Date('2026-07-07T00:00:00.000Z'),
+    });
+  });
 });
 
 describe('groupsRouter removeMember', () => {
@@ -643,6 +880,29 @@ describe('groupsRouter removeMember', () => {
     expect(stores.users.get(MEMBER_ID)?.groupId).toBeNull();
     expect(stores.challenges.get(CHALLENGE_ID)?.isActive).toBe(false);
     expect(stores.challenges.get(CHALLENGE_ID)?.endDate).toBeDefined();
+  });
+
+  it('removes an admin grant and rotates primary admin when removing an admin member', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: MEMBER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, CALLER_ID), {
+      groupId: GROUP_ID,
+      userId: CALLER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    seedActiveChallenge(stores, { userId: MEMBER_ID, groupId: GROUP_ID });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    const result = await caller.removeMember({ userId: MEMBER_ID });
+
+    expect(result).toEqual({ success: true });
+    expect(stores.users.get(MEMBER_ID)?.groupId).toBeNull();
+    expect(stores.groupAdmins.has(groupAdminKey(GROUP_ID, MEMBER_ID))).toBe(
+      false,
+    );
+    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(CALLER_ID);
   });
 
   it('rejects removeMember from a non-admin caller', async () => {
@@ -670,7 +930,7 @@ describe('groupsRouter removeMember', () => {
       caller.removeMember({ userId: CALLER_ID }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
-      message: 'Transfer admin before leaving or use profile settings',
+      message: 'Use profile settings to leave the group',
     } satisfies Partial<TRPCError>);
   });
 
@@ -689,35 +949,41 @@ describe('groupsRouter removeMember', () => {
   });
 });
 
-describe('groupsRouter transferAdmin', () => {
-  it('transfers admin to another group member', async () => {
+describe('groupsRouter admin membership', () => {
+  it('promotes another member without removing the current admin', async () => {
     const stores = createGroupsStores();
     seedGroup(stores, { adminUserId: CALLER_ID });
     stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
     seedMember(stores);
     const caller = groupsRouter.createCaller(createGroupsContext(stores));
 
-    const result = await caller.transferAdmin({ userId: MEMBER_ID });
+    const result = await caller.promoteAdmin({ userId: MEMBER_ID });
 
-    expect(result).toEqual({ adminUserId: MEMBER_ID });
-    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(MEMBER_ID);
+    expect(result).toEqual({ userId: MEMBER_ID });
+    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(CALLER_ID);
+    expect(stores.groupAdmins.has(groupAdminKey(GROUP_ID, CALLER_ID))).toBe(
+      true,
+    );
+    expect(stores.groupAdmins.has(groupAdminKey(GROUP_ID, MEMBER_ID))).toBe(
+      true,
+    );
   });
 
-  it('rejects transferAdmin to self', async () => {
+  it('rejects promoteAdmin to self', async () => {
     const stores = createGroupsStores();
     seedGroup(stores, { adminUserId: CALLER_ID });
     stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
     const caller = groupsRouter.createCaller(createGroupsContext(stores));
 
     await expect(
-      caller.transferAdmin({ userId: CALLER_ID }),
+      caller.promoteAdmin({ userId: CALLER_ID }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
-      message: 'You are already the admin',
+      message: 'You are already an admin',
     } satisfies Partial<TRPCError>);
   });
 
-  it('rejects transferAdmin from a non-admin caller', async () => {
+  it('rejects promoteAdmin from a non-admin caller', async () => {
     const stores = createGroupsStores();
     seedGroup(stores, { adminUserId: 'other-admin' });
     stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
@@ -725,10 +991,66 @@ describe('groupsRouter transferAdmin', () => {
     const caller = groupsRouter.createCaller(createGroupsContext(stores));
 
     await expect(
-      caller.transferAdmin({ userId: MEMBER_ID }),
+      caller.promoteAdmin({ userId: MEMBER_ID }),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       message: 'Admin only',
+    } satisfies Partial<TRPCError>);
+  });
+
+  it('demotes another admin', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, MEMBER_ID), {
+      groupId: GROUP_ID,
+      userId: MEMBER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    const result = await caller.demoteAdmin({ userId: MEMBER_ID });
+
+    expect(result).toEqual({ userId: MEMBER_ID });
+    expect(stores.groupAdmins.has(groupAdminKey(GROUP_ID, MEMBER_ID))).toBe(
+      false,
+    );
+    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(CALLER_ID);
+  });
+
+  it('updates the primary admin when demoting the primary admin', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: MEMBER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    stores.groupAdmins.set(groupAdminKey(GROUP_ID, CALLER_ID), {
+      groupId: GROUP_ID,
+      userId: CALLER_ID,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    await caller.demoteAdmin({ userId: MEMBER_ID });
+
+    expect(stores.groupAdmins.has(groupAdminKey(GROUP_ID, MEMBER_ID))).toBe(
+      false,
+    );
+    expect(stores.groups.get(GROUP_ID)?.adminUserId).toBe(CALLER_ID);
+  });
+
+  it('rejects demoting the last admin', async () => {
+    const stores = createGroupsStores();
+    seedGroup(stores, { adminUserId: CALLER_ID });
+    stores.users.get(CALLER_ID)!.groupId = GROUP_ID;
+    seedMember(stores);
+    const caller = groupsRouter.createCaller(createGroupsContext(stores));
+
+    await expect(
+      caller.demoteAdmin({ userId: MEMBER_ID }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Member is not an admin',
     } satisfies Partial<TRPCError>);
   });
 });

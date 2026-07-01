@@ -447,7 +447,7 @@ function ProfileContent() {
           <p className="text-sm text-[var(--accent-red)]">{exportError}</p>
         )}
 
-        {data.groupId && !data.isGroupAdmin && (
+        {data.groupId && (
           <button
             type="button"
             onClick={() => setShowLeaveModal(true)}

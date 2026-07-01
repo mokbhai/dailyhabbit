@@ -22,22 +22,23 @@ enum MemberStatus {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  phone        String?       @unique
-  email        String?       @unique
-  passwordHash String
-  timezone     String        @default("UTC")
-  avatarUrl    String?
-  groupId      String?
-  group        Group?        @relation(fields: [groupId], references: [id])
-  reminderTime  String?
-  whatsappOptIn Boolean       @default(true)
-  createdAt     DateTime      @default(now())
+  id             String        @id @default(cuid())
+  name           String
+  phone          String?       @unique
+  email          String?       @unique
+  passwordHash   String
+  timezone       String        @default("UTC")
+  avatarUrl      String?
+  groupId        String?
+  group          Group?        @relation(fields: [groupId], references: [id])
+  reminderTime   String?
+  whatsappOptIn  Boolean       @default(true)
+  createdAt      DateTime      @default(now())
   challenges     Challenge[]
   activityLogs   ActivityLog[]
   reminderLogs   ReminderLog[]
-  adminOf        Group[]       @relation("GroupAdmin")
+  primaryAdminOf Group[]       @relation("GroupPrimaryAdmin")
+  groupAdminOf   GroupAdmin[]
 }
 
 model ReminderLog {
@@ -54,18 +55,30 @@ model ReminderLog {
 }
 
 model Group {
-  id                 String     @id @default(cuid())
+  id                 String       @id @default(cuid())
   name               String
-  inviteToken        String     @unique
+  inviteToken        String       @unique
   adminUserId        String
-  admin              User       @relation("GroupAdmin", fields: [adminUserId], references: [id])
+  admin              User         @relation("GroupPrimaryAdmin", fields: [adminUserId], references: [id])
   members            User[]
+  admins             GroupAdmin[]
   dayLabels          DayLabel[]
   activities         Activity[]
   challengeStartDate DateTime?
   challengeEndDate   DateTime?
   challengeTimezone  String?
-  createdAt          DateTime   @default(now())
+  createdAt          DateTime     @default(now())
+}
+
+model GroupAdmin {
+  groupId   String
+  userId    String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
 }
 
 model Challenge {

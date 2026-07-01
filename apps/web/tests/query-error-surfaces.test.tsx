@@ -23,7 +23,8 @@ const mockUseMutation = vi.fn((..._args: unknown[]) => ({
   reset: vi.fn(),
 }));
 const mockRemoveMemberMutate = vi.fn();
-const mockTransferAdminMutate = vi.fn();
+const mockPromoteAdminMutate = vi.fn();
+const mockDemoteAdminMutate = vi.fn();
 const mockSetChallengeRangeMutate = vi.fn();
 const mockSetChallengeThisWeekMutate = vi.fn();
 let removeMemberMutationState = {
@@ -32,8 +33,14 @@ let removeMemberMutationState = {
   error: null as { message: string } | null,
   reset: vi.fn(),
 };
-let transferAdminMutationState = {
-  mutate: mockTransferAdminMutate,
+let promoteAdminMutationState = {
+  mutate: mockPromoteAdminMutate,
+  isPending: false,
+  error: null as { message: string } | null,
+  reset: vi.fn(),
+};
+let demoteAdminMutationState = {
+  mutate: mockDemoteAdminMutate,
   isPending: false,
   error: null as { message: string } | null,
   reset: vi.fn(),
@@ -148,8 +155,11 @@ vi.mock('../src/lib/trpc', () => ({
       removeMember: {
         useMutation: () => removeMemberMutationState,
       },
-      transferAdmin: {
-        useMutation: () => transferAdminMutationState,
+      promoteAdmin: {
+        useMutation: () => promoteAdminMutationState,
+      },
+      demoteAdmin: {
+        useMutation: () => demoteAdminMutationState,
       },
       setChallengeRange: {
         useMutation: () => setChallengeRangeMutationState,
@@ -186,7 +196,8 @@ afterEach(() => {
   mockUseMutation.mockClear();
   mockInvalidate.mockClear();
   mockRemoveMemberMutate.mockReset();
-  mockTransferAdminMutate.mockReset();
+  mockPromoteAdminMutate.mockReset();
+  mockDemoteAdminMutate.mockReset();
   mockSetChallengeRangeMutate.mockReset();
   mockSetChallengeThisWeekMutate.mockReset();
   removeMemberMutationState = {
@@ -195,8 +206,14 @@ afterEach(() => {
     error: null,
     reset: vi.fn(),
   };
-  transferAdminMutationState = {
-    mutate: mockTransferAdminMutate,
+  promoteAdminMutationState = {
+    mutate: mockPromoteAdminMutate,
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  };
+  demoteAdminMutationState = {
+    mutate: mockDemoteAdminMutate,
     isPending: false,
     error: null,
     reset: vi.fn(),
@@ -262,6 +279,8 @@ const adminGroup = {
   name: 'Iron Will Crew',
   inviteToken: 'token',
   adminUserId: 'admin-1',
+  adminUserIds: ['admin-1'],
+  adminCount: 1,
   isAdmin: true,
   inviteUrl: 'http://example.com/join?token=token',
   challengeRange: {
@@ -275,6 +294,8 @@ const adminGroup = {
       id: 'admin-1',
       name: 'Admin User',
       avatarUrl: null,
+      isSelf: true,
+      isAdmin: true,
       currentDay: 5,
       status: 'ACTIVE',
     },
@@ -282,6 +303,8 @@ const adminGroup = {
       id: 'member-2',
       name: 'Jane Doe',
       avatarUrl: null,
+      isSelf: false,
+      isAdmin: false,
       currentDay: 3,
       status: 'ACTIVE',
     },
@@ -392,6 +415,28 @@ describe('query error surfaces', () => {
     const confirmButtons = screen.getAllByRole('button', { name: 'Remove' });
     await userEvent.click(confirmButtons[confirmButtons.length - 1]!);
     expect(mockRemoveMemberMutate).toHaveBeenCalledWith({ userId: 'member-2' });
+  });
+
+  it('shows admin badges and confirms making a member an admin', async () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(adminGroup));
+
+    render(<ManageGroupContent />);
+
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Make admin' }));
+    expect(
+      screen.getByRole('heading', {
+        name: 'Make Jane Doe an admin?',
+      }),
+    ).toBeInTheDocument();
+
+    const confirmButtons = screen.getAllByRole('button', {
+      name: 'Make admin',
+    });
+    await userEvent.click(confirmButtons[confirmButtons.length - 1]!);
+    expect(mockPromoteAdminMutate).toHaveBeenCalledWith({
+      userId: 'member-2',
+    });
   });
 
   it('shows member removal mutation errors in the confirm modal', async () => {

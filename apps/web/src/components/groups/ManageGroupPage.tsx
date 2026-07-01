@@ -13,7 +13,7 @@ const statusColors: Record<string, string> = {
 };
 
 type PendingMemberAction = {
-  type: 'remove' | 'transfer';
+  type: 'remove' | 'promote' | 'demote';
   userId: string;
   memberName: string;
 };
@@ -37,7 +37,13 @@ export function ManageGroupContent() {
       setPendingAction(null);
     },
   });
-  const transferAdmin = trpc.groups.transferAdmin.useMutation({
+  const promoteAdmin = trpc.groups.promoteAdmin.useMutation({
+    onSuccess: () => {
+      utils.groups.getMine.invalidate();
+      setPendingAction(null);
+    },
+  });
+  const demoteAdmin = trpc.groups.demoteAdmin.useMutation({
     onSuccess: () => {
       utils.groups.getMine.invalidate();
       setPendingAction(null);
@@ -45,7 +51,11 @@ export function ManageGroupContent() {
   });
 
   const activeMutation =
-    pendingAction?.type === 'remove' ? removeMember : transferAdmin;
+    pendingAction?.type === 'remove'
+      ? removeMember
+      : pendingAction?.type === 'demote'
+        ? demoteAdmin
+        : promoteAdmin;
 
   if (group.isLoading) {
     return (
@@ -130,7 +140,7 @@ export function ManageGroupContent() {
             {group.data.name}
           </h1>
           <p className="text-sm text-[var(--text-muted)]">
-            {group.data.isAdmin ? 'You are the admin' : 'Group member'}
+            {group.data.isAdmin ? 'You are an admin' : 'Group member'}
           </p>
         </div>
         <a
@@ -176,9 +186,16 @@ export function ManageGroupContent() {
                   )}
                 </div>
                 <div>
-                  <p className="font-medium text-[var(--text-primary)]">
-                    {member.name}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-[var(--text-primary)]">
+                      {member.name}
+                    </p>
+                    {member.isAdmin && (
+                      <span className="rounded border border-[var(--gold)]/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--gold)]">
+                        Admin
+                      </span>
+                    )}
+                  </div>
                   <p
                     className={`text-xs uppercase tracking-wider ${statusColors[member.status] ?? ''}`}
                   >
@@ -192,30 +209,55 @@ export function ManageGroupContent() {
                 </div>
               </div>
 
-              {group.data?.isAdmin && member.id !== group.data.adminUserId && (
+              {group.data?.isAdmin && !member.isSelf && (
                 <div className="flex gap-2">
+                  {member.isAdmin ? (
+                    group.data.adminCount > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Clear any prior failure so a fresh modal opens clean.
+                          removeMember.reset();
+                          promoteAdmin.reset();
+                          demoteAdmin.reset();
+                          setPendingAction({
+                            type: 'demote',
+                            userId: member.id,
+                            memberName: member.name,
+                          });
+                        }}
+                        disabled={demoteAdmin.isPending}
+                        className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--gold)]"
+                      >
+                        Remove admin
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Clear any prior failure so a fresh modal opens clean.
+                        removeMember.reset();
+                        promoteAdmin.reset();
+                        demoteAdmin.reset();
+                        setPendingAction({
+                          type: 'promote',
+                          userId: member.id,
+                          memberName: member.name,
+                        });
+                      }}
+                      disabled={promoteAdmin.isPending}
+                      className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--gold)]"
+                    >
+                      Make admin
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
-                      // Clear any prior failure so a fresh modal opens clean.
                       removeMember.reset();
-                      transferAdmin.reset();
-                      setPendingAction({
-                        type: 'transfer',
-                        userId: member.id,
-                        memberName: member.name,
-                      });
-                    }}
-                    disabled={transferAdmin.isPending}
-                    className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--gold)]"
-                  >
-                    Make admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeMember.reset();
-                      transferAdmin.reset();
+                      promoteAdmin.reset();
+                      demoteAdmin.reset();
                       setPendingAction({
                         type: 'remove',
                         userId: member.id,
@@ -240,7 +282,9 @@ export function ManageGroupContent() {
             <h3 className="text-lg text-[var(--text-primary)]">
               {pendingAction.type === 'remove'
                 ? `Remove ${pendingAction.memberName} from the group?`
-                : `Make ${pendingAction.memberName} the group admin?`}
+                : pendingAction.type === 'demote'
+                  ? `Remove ${pendingAction.memberName}'s admin access?`
+                  : `Make ${pendingAction.memberName} an admin?`}
             </h3>
             {activeMutation.error && (
               <p className="mt-2 text-sm text-[var(--accent-red)]">
@@ -260,8 +304,10 @@ export function ManageGroupContent() {
                 onClick={() => {
                   if (pendingAction.type === 'remove') {
                     removeMember.mutate({ userId: pendingAction.userId });
+                  } else if (pendingAction.type === 'demote') {
+                    demoteAdmin.mutate({ userId: pendingAction.userId });
                   } else {
-                    transferAdmin.mutate({ userId: pendingAction.userId });
+                    promoteAdmin.mutate({ userId: pendingAction.userId });
                   }
                 }}
                 disabled={activeMutation.isPending}
@@ -271,7 +317,9 @@ export function ManageGroupContent() {
                   ? 'Working...'
                   : pendingAction.type === 'remove'
                     ? 'Remove'
-                    : 'Make admin'}
+                    : pendingAction.type === 'demote'
+                      ? 'Remove admin'
+                      : 'Make admin'}
               </button>
             </div>
           </div>
