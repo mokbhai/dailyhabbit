@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+def androidVersionName = (System.getenv('ANDROID_VERSION_NAME') ?: '1.0').replaceFirst('^v', '')
+def androidVersionCode = (System.getenv('ANDROID_VERSION_CODE') ?: '1').toInteger()
+
 android {
     namespace "com.drcode.hard75"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +10,8 @@ android {
         applicationId "com.drcode.hard75"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode androidVersionCode
+        versionName androidVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

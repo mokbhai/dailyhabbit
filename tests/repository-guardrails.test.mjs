@@ -118,6 +118,38 @@ test('build-and-publish workflow is gated on CI and publishes per-app images', a
   assert.match(workflow, /node scripts\/deploy\/run\.mjs/);
 });
 
+test('release workflow publishes mobile web bundle and Android debug APK', async () => {
+  const workflow = await readText('.github/workflows/release.yml');
+  const apkDownloadStep =
+    workflow.match(
+      /- name: Download Android debug APK[\s\S]*?(?=\n      - name:|\n  [a-z-]+:|$)/,
+    )?.[0] ?? '';
+  const releaseStep =
+    workflow.match(
+      /- name: Create GitHub release[\s\S]*?(?=\n      - name:|\n  [a-z-]+:|$)/,
+    )?.[0] ?? '';
+
+  assert.match(workflow, /actions\/setup-java@v4/);
+  assert.match(workflow, /java-version: '21'/);
+  assert.match(workflow, /android-actions\/setup-android@v3/);
+  assert.match(workflow, /pnpm --filter @workspace-starter\/mobile build/);
+  assert.match(workflow, /\.\/gradlew assembleDebug --no-daemon/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version \}\}/);
+  assert.match(
+    workflow,
+    /ANDROID_VERSION_CODE: \$\{\{ github\.run_number \}\}/,
+  );
+  assert.match(workflow, /mobile-web-bundle\.tar\.gz/);
+  assert.match(
+    workflow,
+    /apps\/mobile\/android\/app\/build\/outputs\/apk\/debug\/app-debug\.apk/,
+  );
+  assert.match(apkDownloadStep, /name: android-debug-apk/);
+  assert.match(releaseStep, /files:\s*\|/);
+  assert.match(releaseStep, /mobile-web-bundle\.tar\.gz/);
+  assert.match(releaseStep, /app-debug\.apk/);
+});
+
 test('deployment is convention-driven by apps/<name>/Dockerfile', async () => {
   // Frontends are aggregated behind web-host, so they ship no individual
   // Dockerfile; web-host and the api do.
