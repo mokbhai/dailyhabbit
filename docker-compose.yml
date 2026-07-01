@@ -11,7 +11,7 @@ services:
       HOST: 0.0.0.0
       PRIMARY_FRONTEND: ${PRIMARY_FRONTEND:-web}
     ports:
-      - '${WEB_PORT:-4321}:4321'
+      - '4321'
     depends_on:
       api:
         condition: service_started
@@ -36,7 +36,7 @@ services:
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
     ports:
-      - '${API_PORT:-3001}:3001'
+      - '3001'
     volumes:
       - app-data:/app/data
 
