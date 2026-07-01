@@ -59,6 +59,19 @@ pnpm start
 
 See [docs/guides/deployment.md](docs/guides/deployment.md) for how frontends and backends are built, published, and deployed.
 
+## Releases
+
+The manual `Release` GitHub workflow creates a versioned release, publishes
+container images, and attaches mobile artifacts:
+
+- `mobile-web-bundle.tar.gz`: the Capacitor web payload.
+- `app-debug.apk`: a debug-signed Android APK for sideload testing. Its
+  Android `versionName` comes from the release tag and `versionCode` comes from
+  the GitHub Actions run number.
+
+The debug APK is not suitable for Google Play distribution. Play-ready releases
+still require Android signing secrets and a signed release AAB/APK build.
+
 ## Common Commands
 
 ```bash
